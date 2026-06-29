@@ -263,8 +263,14 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           }
           const provider = sync.data.provider.find((item) => item.id === value.providerID)
           const info = provider?.models[value.modelID]
+          const providerLabel =
+            value.providerID === "opencode"
+              ? "Maji Zen"
+              : value.providerID === "opencode-go"
+                ? "Maji Go"
+                : provider?.name ?? value.providerID
           return {
-            provider: provider?.name ?? value.providerID,
+            provider: providerLabel,
             model: info?.name ?? value.modelID,
             reasoning: info?.capabilities?.reasoning ?? false,
           }
