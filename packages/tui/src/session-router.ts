@@ -42,6 +42,9 @@ export function routePromptToSession(input: {
       const pendingInput = pendingPermissions + pendingQuestions
       const titleOverlap = overlap(tokens, titleTokens)
       const contextOverlap = overlap(tokens, contextTokens)
+      const titlePhraseMatches = phraseOverlap(prompt, title)
+      const contextPhraseMatches = phraseOverlap(prompt, context)
+      const phraseMatches = titlePhraseMatches + contextPhraseMatches
       const pathMatches = pathOverlap(promptPaths, contextPaths)
       const explicitTitle = title.length >= 5 && prompt.includes(title)
       const sameDirectory = input.directory && session.directory === input.directory
@@ -53,6 +56,8 @@ export function routePromptToSession(input: {
         (titleOverlap > 0 ? Math.min(2, (titleOverlap / Math.max(1, titleTokens.size)) * 3) : 0) +
         contextOverlap * 1.25 +
         (contextOverlap > 0 ? Math.min(3, (contextOverlap / Math.max(1, contextTokens.size)) * 10) : 0) +
+        phraseMatches * 3 +
+        (followup && phraseMatches > 0 ? 1.4 : 0) +
         pathMatches * 3 +
         (sameDirectory ? 1.2 : 0) +
         recent +
@@ -67,9 +72,9 @@ export function routePromptToSession(input: {
           ? "file match"
           : pendingInput > 0 && affirmative
             ? "waiting for input"
-            : contextOverlap > 0
+            : contextOverlap > 0 || contextPhraseMatches > 0
               ? "conversation match"
-              : titleOverlap > 0
+              : titleOverlap > 0 || titlePhraseMatches > 0
                 ? "topic match"
                 : followup && recent > 0
                   ? "recent follow-up"
@@ -116,6 +121,27 @@ function overlap(left: Set<string>, right: Set<string>) {
   return [...left].filter((token) => right.has(token)).length
 }
 
+function phraseOverlap(prompt: string, context: string) {
+  if (!context) return 0
+  return phraseCandidates(prompt).filter((phrase) => context.includes(phrase)).length
+}
+
+function phraseCandidates(input: string) {
+  const tokens = input
+    .split(" ")
+    .map((token) => token.trim())
+    .filter((token) => token.length > 2)
+    .filter((token) => !stopwords.has(token))
+
+  const phrases = new Set<string>()
+  for (const size of [3, 2]) {
+    for (let index = 0; index <= tokens.length - size; index++) {
+      phrases.add(tokens.slice(index, index + size).join(" "))
+    }
+  }
+  return [...phrases]
+}
+
 function extractPaths(input: string) {
   return new Set(
     input
@@ -142,7 +168,9 @@ function recencyScore(now: number, updated: number) {
 }
 
 function isFollowup(prompt: string) {
-  return /\b(also|again|continue|that|this|it|those|there|same|previous|earlier|next|now|still)\b/.test(prompt)
+  return /\b(also|again|continue|that|this|it|those|there|same|previous|earlier|next|now|still|status|result|results|outcome|went)\b/.test(
+    prompt,
+  ) || /\bhow\s+(did|was|were)\b/.test(prompt)
 }
 
 function isAffirmative(prompt: string) {
@@ -167,10 +195,19 @@ const stopwords = new Set([
   "into",
   "about",
   "what",
+  "did",
+  "does",
+  "done",
   "when",
   "where",
   "why",
   "how",
+  "was",
+  "were",
+  "is",
+  "are",
+  "go",
+  "went",
   "fix",
   "make",
   "add",

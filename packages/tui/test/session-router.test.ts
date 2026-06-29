@@ -103,4 +103,26 @@ describe("session-router", () => {
     expect(decision?.sessionID).toBe("a")
     expect(decision?.reason).toBe("file match")
   })
+
+  test("routes status follow-ups to the session with matching conversation context", () => {
+    const decision = routePromptToSession({
+      prompt: "How did the security audit go?",
+      sessions: [
+        session({ id: "a", title: "New session", updated: now - 45 * 60_000 }),
+        session({ id: "b", title: "New session", updated: now - 2 * 60_000 }),
+      ],
+      statuses: {},
+      permissions: {},
+      questions: {},
+      profiles: {
+        a: { text: "We completed a security audit and found two medium-risk auth findings." },
+        b: { text: "We discussed mobile layout polish and command menu styling." },
+      },
+      directory: "/repo",
+      now,
+    })
+
+    expect(decision?.sessionID).toBe("a")
+    expect(decision?.reason).toBe("conversation match")
+  })
 })
