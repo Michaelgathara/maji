@@ -13,6 +13,7 @@ import { useTerminalDimensions } from "@opentui/solid"
 import { useTuiConfig } from "../config"
 import { HomeSessionDestinationProvider } from "./home/session-destination"
 import { HomeAttentionRail } from "./home/attention-rail"
+import { useTheme } from "../context/theme"
 
 let once = false
 const hydratedHomeSessions = new Set<string>()
@@ -32,6 +33,7 @@ export function Home() {
   const editor = useEditorContext()
   const dimensions = useTerminalDimensions()
   const tuiConfig = useTuiConfig()
+  const { theme } = useTheme()
   const promptMaxWidth = createMemo(() => {
     const configured = tuiConfig.prompt?.max_width
     if (configured === "auto") return Math.max(75, Math.floor(dimensions().width * 0.7))
@@ -72,10 +74,16 @@ export function Home() {
 
   createEffect(() => {
     if (!sync.ready) return
-    for (const session of sync.data.session
+    const warmSessions = sync.data.session
       .filter((session) => !session.parentID && !session.time.archived)
-      .toSorted((a, b) => b.time.updated - a.time.updated)
-      .slice(0, 8)) {
+      .toSorted((a, b) => {
+        const aNeedsMemory = local.session.routing(a.id) ? 0 : 1
+        const bNeedsMemory = local.session.routing(b.id) ? 0 : 1
+        return bNeedsMemory - aNeedsMemory || b.time.updated - a.time.updated
+      })
+      .slice(0, 16)
+
+    for (const session of warmSessions) {
       if (hydratedHomeSessions.has(session.id)) continue
       hydratedHomeSessions.add(session.id)
       void sync.session.sync(session.id).catch(() => hydratedHomeSessions.delete(session.id))
@@ -90,7 +98,10 @@ export function Home() {
           <box height={4} minHeight={0} flexShrink={1} />
           <box flexShrink={0}>
             <pluginRuntime.Slot name="home_logo" mode="replace">
-              <Logo />
+              <box flexDirection="column" alignItems="center">
+                <Logo />
+                <text fg={theme.text}>Maji</text>
+              </box>
             </pluginRuntime.Slot>
           </box>
           <box height={1} minHeight={0} flexShrink={1} />

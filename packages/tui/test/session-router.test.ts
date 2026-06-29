@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { Session, SessionStatus } from "@opencode-ai/sdk/v2"
-import { routePromptToSession } from "../src/session-router"
+import { buildSessionRouteProfile, buildSessionRoutingMemory, routePromptToSession } from "../src/session-router"
 
 const now = 1_800_000
 
@@ -124,5 +124,65 @@ describe("session-router", () => {
 
     expect(decision?.sessionID).toBe("a")
     expect(decision?.reason).toBe("conversation match")
+  })
+
+  test("routes using stored session memory even without hydrated transcript", () => {
+    const decision = routePromptToSession({
+      prompt: "How did the security audit go?",
+      sessions: [
+        session({ id: "a", title: "New session", updated: now - 40 * 60_000 }),
+        session({ id: "b", title: "New session", updated: now - 2 * 60_000 }),
+      ],
+      statuses: {},
+      permissions: {},
+      questions: {},
+      profiles: {
+        a: {
+          summary: "Security audit latest outcome medium-risk auth findings",
+          topics: ["security audit", "auth findings"],
+          intents: ["security-audit"],
+          statusHint: "done",
+        },
+        b: {
+          summary: "Recent UI polish work for the command menu",
+          topics: ["command menu", "ui polish"],
+          intents: ["planning"],
+          statusHint: "done",
+        },
+      },
+      directory: "/repo",
+      now,
+    })
+
+    expect(decision?.sessionID).toBe("a")
+    expect(decision?.reason).toBe("memory match")
+  })
+
+  test("builds a route profile from routing memory and transcript", () => {
+    const target = session({ id: "a", title: "Security audit" })
+    const memory = buildSessionRoutingMemory({
+      session: target,
+      messages: [{ id: "m1", role: "user" }, { id: "m2", role: "assistant" }],
+      parts: {
+        m1: [{ type: "text", text: "Please run a security audit on the auth flow." }],
+        m2: [{ type: "text", text: "The security audit found two medium-risk auth issues." }],
+      },
+      pendingInput: 0,
+      now,
+    })
+    const profile = buildSessionRouteProfile({
+      session: target,
+      memory,
+      messages: [{ id: "m1", role: "user" }, { id: "m2", role: "assistant" }],
+      parts: {
+        m1: [{ type: "text", text: "Please run a security audit on the auth flow." }],
+        m2: [{ type: "text", text: "The security audit found two medium-risk auth issues." }],
+      },
+    })
+
+    expect(profile.summary).toContain("Security audit")
+    expect(profile.topics).toContain("security audit")
+    expect(profile.intents).toContain("security-audit")
+    expect(profile.lastAssistantReply).toContain("medium-risk auth issues")
   })
 })

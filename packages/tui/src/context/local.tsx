@@ -12,6 +12,7 @@ import { readJson, writeJsonAtomic } from "../util/persistence"
 import { useTheme } from "./theme"
 import { useToast } from "../ui/toast"
 import { useRoute } from "./route"
+import { buildSessionRoutingMemory, type SessionRoutingMemory } from "../session-router"
 
 export type LocalTheme = {
   secondary: RGBA
@@ -415,9 +416,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       const [sessionStore, setSessionStore] = createStore<{
         ready: boolean
         pinned: string[]
+        routing: Record<string, SessionRoutingMemory>
       }>({
         ready: false,
         pinned: [],
+        routing: {},
       })
 
       const filePath = path.join(paths.state, "session.json")
@@ -433,6 +436,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         state.pending = false
         void writeJsonAtomic(filePath, {
           pinned: sessionStore.pinned,
+          routing: sessionStore.routing,
         })
       }
 
@@ -440,11 +444,26 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         .then((x) => {
           if (!x || typeof x !== "object") return
           const pinned = (x as Record<string, unknown>).pinned
+          const routing = (x as Record<string, unknown>).routing
           if (Array.isArray(pinned))
             setSessionStore(
               "pinned",
               pinned.filter((item): item is string => typeof item === "string"),
             )
+          if (routing && typeof routing === "object") {
+            const entries = Object.entries(routing).filter(
+              (entry): entry is [string, SessionRoutingMemory] =>
+                typeof entry[0] === "string" &&
+                !!entry[1] &&
+                typeof entry[1] === "object" &&
+                entry[1].version === 1 &&
+                typeof entry[1].fingerprint === "string" &&
+                Array.isArray(entry[1].topics) &&
+                Array.isArray(entry[1].intents) &&
+                Array.isArray(entry[1].files),
+            )
+            setSessionStore("routing", Object.fromEntries(entries))
+          }
         })
         .catch(() => {})
         .finally(() => {
@@ -467,12 +486,63 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               sessionStore.pinned.filter((x) => x !== sessionID),
             )
           }
+          if (sessionStore.routing[sessionID]) {
+            setSessionStore(
+              "routing",
+              Object.fromEntries(Object.entries(sessionStore.routing).filter(([id]) => id !== sessionID)),
+            )
+          }
           save()
         })
       }
 
       event.on("session.deleted", (evt) => {
         prune(evt.properties.info.id)
+      })
+
+      createEffect(() => {
+        if (!sessionStore.ready || !sync.ready) return
+        const valid = new Set(sync.data.session.filter((item) => !item.parentID && !item.time.archived).map((item) => item.id))
+        const stale = Object.keys(sessionStore.routing).filter((id) => !valid.has(id))
+        if (stale.length === 0) return
+        batch(() => {
+          setSessionStore(
+            "routing",
+            Object.fromEntries(Object.entries(sessionStore.routing).filter(([id]) => valid.has(id))),
+          )
+          save()
+        })
+      })
+
+      createEffect(() => {
+        if (!sessionStore.ready || !sync.ready) return
+        const updates = sync.data.session
+          .filter((item) => !item.parentID && !item.time.archived)
+          .toSorted((a, b) => b.time.updated - a.time.updated)
+          .slice(0, 32)
+          .flatMap((session) => {
+            const messages = sync.data.message[session.id]
+            if (!messages?.length) return []
+            const memory = buildSessionRoutingMemory({
+              session,
+              messages,
+              parts: sync.data.part,
+              status: sync.data.session_status[session.id],
+              pendingInput: (sync.data.permission[session.id]?.length ?? 0) + (sync.data.question[session.id]?.length ?? 0),
+            })
+            const current = sessionStore.routing[session.id]
+            if (current?.fingerprint === memory.fingerprint) return []
+            return [[session.id, memory] as const]
+          })
+
+        if (updates.length === 0) return
+
+        batch(() => {
+          for (const [sessionID, memory] of updates) {
+            setSessionStore("routing", sessionID, memory)
+          }
+          save()
+        })
       })
 
       return {
@@ -483,6 +553,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           return sessionStore.pinned
         },
         slots,
+        routing(sessionID: string) {
+          return sessionStore.routing[sessionID]
+        },
         isPinned(sessionID: string) {
           return sessionStore.pinned.includes(sessionID)
         },

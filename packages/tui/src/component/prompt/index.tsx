@@ -56,7 +56,7 @@ import { useTuiConfig } from "../../config"
 import { usePromptWorkspace } from "./workspace"
 import { usePromptMove } from "./move"
 import { readLocalAttachment } from "./local-attachment"
-import { routePromptToSession } from "../../session-router"
+import { buildSessionRouteProfile, routePromptToSession } from "../../session-router"
 
 export type PromptProps = {
   sessionID?: string
@@ -925,34 +925,18 @@ export function Prompt(props: PromptProps) {
 
   function routingProfiles() {
     return Object.fromEntries(
-      sync.data.session.map((session) => [
-        session.id,
-        {
-          text: [
-            session.title,
-            ...(sync.data.message[session.id] ?? [])
-              .slice(-24)
-              .flatMap((message) =>
-                (sync.data.part[message.id] ?? []).flatMap((part) => {
-                  if (part.type === "text" && !part.synthetic && !part.ignored) return [part.text]
-                  if (part.type === "file") {
-                    return [part.filename, part.source && "path" in part.source ? part.source.path : undefined].filter(
-                      Boolean,
-                    )
-                  }
-                  if (part.type === "tool") {
-                    return [
-                      part.tool,
-                      "title" in part.state ? part.state.title : undefined,
-                      "input" in part.state ? JSON.stringify(part.state.input ?? {}) : undefined,
-                    ].filter(Boolean)
-                  }
-                  return []
-                }),
-              ),
-          ].join("\n"),
-        },
-      ]),
+      sync.data.session.map((session) => {
+        const messages = sync.data.message[session.id]
+        return [
+          session.id,
+          buildSessionRouteProfile({
+            session,
+            memory: local.session.routing(session.id),
+            messages,
+            parts: sync.data.part,
+          }),
+        ]
+      }),
     )
   }
 

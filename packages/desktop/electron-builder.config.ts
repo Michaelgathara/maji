@@ -116,7 +116,7 @@ function getConfig() {
         ...base,
         appId,
         productName: "Maji Dev",
-        rpm: { packageName: "opencode-dev" },
+        rpm: { packageName: "maji-dev" },
       }
     }
     case "beta": {
@@ -126,7 +126,7 @@ function getConfig() {
         productName: "Maji Beta",
         protocols: { name: "Maji Beta", schemes: ["opencode"] },
         publish: { provider: "github", owner: "anomalyco", repo: "opencode-beta", channel: "latest" },
-        rpm: { packageName: "opencode-beta" },
+        rpm: { packageName: "maji-beta" },
       }
     }
     case "prod": {
@@ -137,7 +137,7 @@ function getConfig() {
         protocols: { name: "Maji", schemes: ["opencode"] },
         publish: { provider: "github", owner: "anomalyco", repo: "opencode", channel: "latest" },
         deb: { fpm: [legacyDesktopEntryFpm] },
-        rpm: { packageName: "opencode", fpm: [legacyDesktopEntryFpm] },
+        rpm: { packageName: "maji", fpm: [legacyDesktopEntryFpm] },
       }
     }
   }
