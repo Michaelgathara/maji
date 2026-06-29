@@ -1,6 +1,6 @@
-# OpenCode Desktop
+# Maji Desktop
 
-The OpenCode Desktop app, built with Electron.
+The Maji Desktop app, built with Electron.
 
 ## Development
 
