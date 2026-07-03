@@ -10,10 +10,15 @@ export type SessionRouteDecision = {
 export type SessionRouteProfile = {
   text?: string
   summary?: string
+  canonicalTopic?: string
+  taskType?: string
   topics?: string[]
   intents?: string[]
   files?: string[]
   statusHint?: "needs-input" | "active" | "done" | "idle"
+  currentStatus?: string
+  outcome?: string
+  openQuestions?: string[]
   lastUserPrompt?: string
   lastAssistantReply?: string
 }
@@ -22,10 +27,15 @@ export type SessionRoutingMemory = {
   version: 1
   fingerprint: string
   summary?: string
+  canonicalTopic?: string
+  taskType?: string
   topics: string[]
   intents: string[]
   files: string[]
   statusHint: SessionRouteProfile["statusHint"]
+  currentStatus?: string
+  outcome?: string
+  openQuestions: string[]
   lastUserPrompt?: string
   lastAssistantReply?: string
   updatedAt: number
@@ -54,6 +64,7 @@ export function routePromptToSession(input: {
   permissions: Record<string, readonly unknown[]>
   questions: Record<string, readonly unknown[]>
   profiles?: Record<string, SessionRouteProfile | undefined>
+  currentSessionID?: string
   directory?: string
   now?: number
 }): SessionRouteDecision | undefined {
@@ -74,8 +85,13 @@ export function routePromptToSession(input: {
       const profile = input.profiles?.[session.id]
       const summary = normalize(profile?.summary ?? "")
       const summaryTokens = tokenize(summary)
-      const topics = normalize((profile?.topics ?? []).join(" "))
+      const topics = normalize(
+        [profile?.canonicalTopic, profile?.taskType, ...(profile?.topics ?? []), profile?.outcome, profile?.currentStatus]
+          .filter(Boolean)
+          .join(" "),
+      )
       const topicTokens = tokenize(topics)
+      const questionTokens = tokenize(normalize((profile?.openQuestions ?? []).join(" ")))
       const topicPaths = extractPaths((profile?.files ?? []).join(" "))
       const sessionIntents = new Set(profile?.intents ?? [])
       const context = normalize(profile?.text ?? "")
@@ -87,6 +103,7 @@ export function routePromptToSession(input: {
       const titleOverlap = overlap(tokens, titleTokens)
       const summaryOverlap = overlap(tokens, summaryTokens)
       const topicOverlap = overlap(tokens, topicTokens)
+      const questionOverlap = overlap(tokens, questionTokens)
       const intentOverlap = overlap(intents, sessionIntents)
       const contextOverlap = overlap(tokens, contextTokens)
       const titlePhraseMatches = phraseOverlap(prompt, title)
@@ -99,16 +116,27 @@ export function routePromptToSession(input: {
       const explicitTitle = title.length >= 5 && prompt.includes(title)
       const sameDirectory = input.directory && session.directory === input.directory
       const recent = recencyScore(input.now ?? Date.now(), session.time.updated)
-      const busy = input.statuses[session.id]?.type !== "idle"
-      const memorySignal = summaryOverlap + topicOverlap + intentOverlap + summaryPhraseMatches + topicPhraseMatches
+      const status = input.statuses[session.id]
+      const busy = !!status && status.type !== "idle"
+      const current = session.id === input.currentSessionID
+      const memorySignal =
+        summaryOverlap + topicOverlap + questionOverlap + intentOverlap + summaryPhraseMatches + topicPhraseMatches
       const statusHint = profile?.statusHint
+      const stayBias =
+        current
+          ? 2.4 +
+            (followup ? 1.2 : 0) +
+            (titleOverlap + contextOverlap + summaryOverlap + topicOverlap + phraseMatches > 0 ? 1.3 : 0)
+          : 0
       const score =
         (explicitTitle ? 8 : 0) +
+        stayBias +
         titleOverlap * 1.8 +
         (titleOverlap > 0 ? Math.min(2, (titleOverlap / Math.max(1, titleTokens.size)) * 3) : 0) +
         summaryOverlap * 2.2 +
         (summaryOverlap > 0 ? Math.min(3.5, (summaryOverlap / Math.max(1, summaryTokens.size)) * 12) : 0) +
         topicOverlap * 2.3 +
+        questionOverlap * 1.8 +
         intentOverlap * 3.4 +
         contextOverlap * 1.1 +
         (contextOverlap > 0 ? Math.min(3, (contextOverlap / Math.max(1, contextTokens.size)) * 10) : 0) +
@@ -150,12 +178,17 @@ export function routePromptToSession(input: {
   const best = candidates[0]
   if (!best) return
 
+  const currentCandidate = input.currentSessionID
+    ? candidates.find((candidate) => candidate.session.id === input.currentSessionID)
+    : undefined
+  if (currentCandidate && best.session.id !== input.currentSessionID && best.score - currentCandidate.score < 2) return
+
   const next = candidates[1]
   if (
     next &&
     best.score - next.score < 1.15 &&
     (best.reason !== "title match" || next.reason === "title match") &&
-    !(best.reason === "memory match" && next.reason !== "memory match")
+    !(best.reason === "memory match" && next.reason !== "memory match" && next.session.id !== input.currentSessionID)
   )
     return
 
@@ -192,21 +225,29 @@ export function buildSessionRoutingMemory(input: {
     ...keywords.filter((token) => !phrases.some((phrase) => phrase.includes(token))).slice(0, 5),
   ]).slice(0, 8)
   const intents = [...classifyIntents(weightedSegments.map((segment) => segment.text).join("\n"))]
+  const taskType = inferTaskType(intents, weightedSegments.map((segment) => segment.text).join("\n"))
+  const canonicalTopic = topics[0]
   const files = dedupePreserve(transcript.files.map((item) => item.trim()).filter(Boolean)).slice(0, 8)
   const statusHint =
     input.pendingInput && input.pendingInput > 0
       ? "needs-input"
-      : input.status?.type !== "idle"
+      : input.status && input.status.type !== "idle"
         ? "active"
         : lastAssistantReply
           ? "done"
           : "idle"
+  const currentStatus = describeStatus(statusHint, lastAssistantReply)
+  const outcome = inferOutcome(lastAssistantReply)
+  const openQuestions = inferOpenQuestions([...transcript.user, ...transcript.assistant]).slice(0, 3)
   const summary = summarizeSession({
     title: input.session.title,
+    canonicalTopic,
+    taskType,
     topics,
     lastUserPrompt,
     lastAssistantReply,
     statusHint,
+    outcome,
   })
 
   return {
@@ -219,12 +260,20 @@ export function buildSessionRoutingMemory(input: {
       topics,
       files,
       statusHint,
+      currentStatus,
+      outcome,
+      openQuestions,
     }),
     summary,
+    canonicalTopic,
+    taskType,
     topics,
     intents,
     files,
     statusHint,
+    currentStatus,
+    outcome,
+    openQuestions,
     lastUserPrompt,
     lastAssistantReply,
     updatedAt: input.now ?? Date.now(),
@@ -242,9 +291,14 @@ export function buildSessionRouteProfile(input: {
   const text = [
     input.session.title,
     memory?.summary,
+    memory?.canonicalTopic,
+    memory?.taskType,
     ...(memory?.topics ?? []),
     ...(memory?.intents ?? []),
     ...(memory?.files ?? []),
+    memory?.currentStatus,
+    memory?.outcome,
+    ...(memory?.openQuestions ?? []),
     ...(memory?.lastUserPrompt ? [memory.lastUserPrompt] : []),
     ...(memory?.lastAssistantReply ? [memory.lastAssistantReply] : []),
     ...transcript.all.slice(-32),
@@ -255,10 +309,15 @@ export function buildSessionRouteProfile(input: {
   return {
     text,
     summary: memory?.summary,
+    canonicalTopic: memory?.canonicalTopic,
+    taskType: memory?.taskType,
     topics: memory?.topics ?? [],
     intents: memory?.intents ?? [],
     files: dedupePreserve([...(memory?.files ?? []), ...transcript.files]).slice(0, 12),
     statusHint: memory?.statusHint,
+    currentStatus: memory?.currentStatus,
+    outcome: memory?.outcome,
+    openQuestions: memory?.openQuestions ?? [],
     lastUserPrompt: memory?.lastUserPrompt ?? transcript.user.at(-1),
     lastAssistantReply: memory?.lastAssistantReply ?? transcript.assistant.at(-1),
   }
@@ -378,6 +437,20 @@ function classifyIntents(input: string) {
   return intents
 }
 
+function inferTaskType(intents: string[], input: string) {
+  if (intents.includes("security-audit")) return "security audit"
+  if (intents.includes("bugfix")) return "bug fix"
+  if (intents.includes("tests")) return "test work"
+  if (intents.includes("build")) return "build/release"
+  if (intents.includes("refactor")) return "refactor"
+  if (intents.includes("planning")) return "planning"
+  if (intents.includes("research")) return "research"
+  if (intents.includes("docs")) return "documentation"
+  const text = normalize(input)
+  if (/\b(ui|tui|screen|layout|design|component)\b/.test(text)) return "ui work"
+  return undefined
+}
+
 function collectTranscript(messages: readonly RoutingMessage[], partsByMessage: Record<string, readonly RoutingPart[] | undefined>) {
   const user: string[] = []
   const assistant: string[] = []
@@ -478,13 +551,16 @@ function weightedPhrases(segments: { text: string; weight: number }[]) {
 
 function summarizeSession(input: {
   title: string
+  canonicalTopic?: string
+  taskType?: string
   topics: string[]
   lastUserPrompt?: string
   lastAssistantReply?: string
   statusHint?: SessionRouteProfile["statusHint"]
+  outcome?: string
 }) {
-  const focus = input.topics.slice(0, 3).join(", ")
-  const detail = truncateText(input.lastUserPrompt ?? input.lastAssistantReply, 140)
+  const focus = [input.canonicalTopic, ...input.topics.filter((topic) => topic !== input.canonicalTopic)].slice(0, 3).join(", ")
+  const detail = truncateText(input.outcome ?? input.lastUserPrompt ?? input.lastAssistantReply, 140)
   const prefix = looksLikeDefaultTitle(input.title) ? "Session" : input.title.trim()
   const suffix =
     input.statusHint === "needs-input"
@@ -494,7 +570,7 @@ function summarizeSession(input: {
         : input.statusHint === "done"
           ? "latest outcome"
           : undefined
-  return [prefix, focus || undefined, suffix, detail].filter(Boolean).join(" - ")
+  return [prefix, input.taskType, focus || undefined, suffix, detail].filter(Boolean).join(" - ")
 }
 
 function routingFingerprint(input: {
@@ -503,6 +579,9 @@ function routingFingerprint(input: {
   topics: string[]
   files: string[]
   statusHint?: SessionRouteProfile["statusHint"]
+  currentStatus?: string
+  outcome?: string
+  openQuestions?: string[]
   lastUserPrompt?: string
   lastAssistantReply?: string
 }) {
@@ -513,9 +592,42 @@ function routingFingerprint(input: {
     normalize(input.lastUserPrompt ?? ""),
     normalize(input.lastAssistantReply ?? ""),
     input.statusHint ?? "",
+    normalize(input.currentStatus ?? ""),
+    normalize(input.outcome ?? ""),
+    (input.openQuestions ?? []).map(normalize).join("|"),
     input.topics.join("|"),
     input.files.join("|"),
   ].join("::")
+}
+
+function describeStatus(statusHint: SessionRouteProfile["statusHint"], lastAssistantReply: string | undefined) {
+  if (statusHint === "needs-input") return "waiting for human input"
+  if (statusHint === "active") return "in progress"
+  if (statusHint === "done") return inferOutcome(lastAssistantReply) ? "finished with an outcome" : "finished"
+  return "idle"
+}
+
+function inferOutcome(lastAssistantReply: string | undefined) {
+  if (!lastAssistantReply) return undefined
+  const clean = lastAssistantReply.replace(/\s+/g, " ").trim()
+  const sentences = clean.split(/(?<=[.!?])\s+/).filter(Boolean)
+  const outcome = sentences.find((sentence) =>
+    /\b(done|finished|completed|fixed|passed|failed|found|result|summary|verified|blocked)\b/i.test(sentence),
+  )
+  return truncateText(outcome ?? sentences.at(-1) ?? clean, 180)
+}
+
+function inferOpenQuestions(messages: string[]) {
+  return dedupePreserve(
+    messages.flatMap((message) =>
+      message
+        .replace(/\s+/g, " ")
+        .split(/(?<=[?!])\s+/)
+        .filter((sentence) => sentence.includes("?") || /\b(blocked|need you|waiting|approve|confirm)\b/i.test(sentence))
+        .map((sentence) => truncateText(sentence, 160))
+        .filter((item): item is string => !!item),
+    ),
+  )
 }
 
 function safeJson(input: unknown) {

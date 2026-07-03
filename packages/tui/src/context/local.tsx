@@ -14,6 +14,18 @@ import { useToast } from "../ui/toast"
 import { useRoute } from "./route"
 import { buildSessionRoutingMemory, type SessionRoutingMemory } from "../session-router"
 
+export type SessionRoutingRecord = {
+  id: string
+  prompt: string
+  sessionID: string
+  title: string
+  reason: string
+  kind: "created" | "routed" | "corrected"
+  score?: number
+  at: number
+  correctedTo?: string
+}
+
 export type LocalTheme = {
   secondary: RGBA
   accent: RGBA
@@ -417,10 +429,12 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         ready: boolean
         pinned: string[]
         routing: Record<string, SessionRoutingMemory>
+        routeHistory: SessionRoutingRecord[]
       }>({
         ready: false,
         pinned: [],
         routing: {},
+        routeHistory: [],
       })
 
       const filePath = path.join(paths.state, "session.json")
@@ -437,6 +451,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         void writeJsonAtomic(filePath, {
           pinned: sessionStore.pinned,
           routing: sessionStore.routing,
+          routeHistory: sessionStore.routeHistory,
         })
       }
 
@@ -445,6 +460,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           if (!x || typeof x !== "object") return
           const pinned = (x as Record<string, unknown>).pinned
           const routing = (x as Record<string, unknown>).routing
+          const routeHistory = (x as Record<string, unknown>).routeHistory
           if (Array.isArray(pinned))
             setSessionStore(
               "pinned",
@@ -463,6 +479,15 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
                 Array.isArray(entry[1].files),
             )
             setSessionStore("routing", Object.fromEntries(entries))
+          }
+          if (Array.isArray(routeHistory)) {
+            setSessionStore(
+              "routeHistory",
+              routeHistory
+                .filter(isSessionRoutingRecord)
+                .sort((a, b) => b.at - a.at)
+                .slice(0, 30),
+            )
           }
         })
         .catch(() => {})
@@ -492,6 +517,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               Object.fromEntries(Object.entries(sessionStore.routing).filter(([id]) => id !== sessionID)),
             )
           }
+          setSessionStore(
+            "routeHistory",
+            sessionStore.routeHistory.filter((item) => item.sessionID !== sessionID && item.correctedTo !== sessionID),
+          )
           save()
         })
       }
@@ -504,11 +533,20 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         if (!sessionStore.ready || !sync.ready) return
         const valid = new Set(sync.data.session.filter((item) => !item.parentID && !item.time.archived).map((item) => item.id))
         const stale = Object.keys(sessionStore.routing).filter((id) => !valid.has(id))
-        if (stale.length === 0) return
+        const staleHistory = sessionStore.routeHistory.filter(
+          (item) => !valid.has(item.sessionID) && (!item.correctedTo || !valid.has(item.correctedTo)),
+        )
+        if (stale.length === 0 && staleHistory.length === 0) return
         batch(() => {
           setSessionStore(
             "routing",
             Object.fromEntries(Object.entries(sessionStore.routing).filter(([id]) => valid.has(id))),
+          )
+          setSessionStore(
+            "routeHistory",
+            sessionStore.routeHistory.filter(
+              (item) => valid.has(item.sessionID) || (item.correctedTo ? valid.has(item.correctedTo) : false),
+            ),
           )
           save()
         })
@@ -555,6 +593,34 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         slots,
         routing(sessionID: string) {
           return sessionStore.routing[sessionID]
+        },
+        routeHistory() {
+          return sessionStore.routeHistory
+        },
+        lastRoute() {
+          return sessionStore.routeHistory[0]
+        },
+        recordRoute(input: Omit<SessionRoutingRecord, "id" | "at"> & { at?: number }) {
+          const record: SessionRoutingRecord = {
+            ...input,
+            id: crypto.randomUUID(),
+            at: input.at ?? Date.now(),
+          }
+          setSessionStore(
+            "routeHistory",
+            [record, ...sessionStore.routeHistory.filter((item) => item.prompt !== record.prompt || item.sessionID !== record.sessionID)].slice(
+              0,
+              30,
+            ),
+          )
+          save()
+          return record
+        },
+        correctRoute(recordID: string, sessionID: string) {
+          const match = sessionStore.routeHistory.findIndex((item) => item.id === recordID)
+          if (match < 0) return
+          setSessionStore("routeHistory", match, "correctedTo", sessionID)
+          save()
         },
         isPinned(sessionID: string) {
           return sessionStore.pinned.includes(sessionID)
@@ -617,3 +683,17 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     return result
   },
 })
+
+function isSessionRoutingRecord(input: unknown): input is SessionRoutingRecord {
+  if (!input || typeof input !== "object") return false
+  const value = input as Record<string, unknown>
+  return (
+    typeof value.id === "string" &&
+    typeof value.prompt === "string" &&
+    typeof value.sessionID === "string" &&
+    typeof value.title === "string" &&
+    typeof value.reason === "string" &&
+    typeof value.at === "number" &&
+    (value.kind === "created" || value.kind === "routed" || value.kind === "corrected")
+  )
+}

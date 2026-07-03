@@ -984,21 +984,6 @@ export function Prompt(props: PromptProps) {
       return false
     }
 
-    const workspaceSession = props.sessionID ? sync.session.get(props.sessionID) : undefined
-    const workspaceID = workspaceSession?.workspaceID
-    const workspaceStatus = workspaceID ? (project.workspace.status(workspaceID) ?? "error") : undefined
-    if (props.sessionID && workspaceID && workspaceStatus !== "connected") {
-      dialog.replace(() => (
-        <DialogWorkspaceUnavailable
-          onRestore={() => {
-            workspace.open()
-            return false
-          }}
-        />
-      ))
-      return false
-    }
-
     const variant = local.model.variant.current()
     const inputText = expandTrackedPastedText(
       store.prompt.input,
@@ -1016,28 +1001,43 @@ export function Prompt(props: PromptProps) {
     // Capture mode before it gets reset
     const currentMode = store.mode
     let sessionID = props.sessionID
+    let routeRecord:
+      | {
+          kind: "created" | "routed"
+          title: string
+          reason: string
+          score?: number
+        }
+      | undefined
     let finishMoveProgress = false
-    if (sessionID == null) {
-      const routing =
-        currentMode === "normal" && !inputText.startsWith("/") && !move.pendingNew()
-          ? routePromptToSession({
-              prompt: inputText,
-              sessions: sync.data.session,
-              statuses: sync.data.session_status,
-              permissions: sync.data.permission,
-              questions: sync.data.question,
-              profiles: routingProfiles(),
-              directory: sync.path.directory || paths.cwd,
-            })
-          : undefined
-      if (routing) {
-        sessionID = routing.sessionID
-        toast.show({
-          message: `Routed to ${Locale.truncate(routing.title, 36)} (${routing.reason})`,
-          variant: "success",
-          duration: 2500,
-        })
+    const routing =
+      currentMode === "normal" && !inputText.startsWith("/") && !move.pendingNew()
+        ? routePromptToSession({
+            prompt: inputText,
+            sessions: sync.data.session,
+            statuses: sync.data.session_status,
+            permissions: sync.data.permission,
+            questions: sync.data.question,
+            profiles: routingProfiles(),
+            currentSessionID: props.sessionID,
+            directory: sync.path.directory || paths.cwd,
+          })
+        : undefined
+    if (routing && routing.sessionID !== sessionID) {
+      sessionID = routing.sessionID
+      routeRecord = {
+        kind: "routed",
+        title: routing.title,
+        reason: routing.reason,
+        score: routing.score,
       }
+      toast.show({
+        message: props.sessionID
+          ? `Sent to ${Locale.truncate(routing.title, 36)} (${routing.reason})`
+          : `Routed to ${Locale.truncate(routing.title, 36)} (${routing.reason})`,
+        variant: "success",
+        duration: 2500,
+      })
     }
     if (sessionID == null) {
       const selectedWorkspace = workspace.selection()
@@ -1071,6 +1071,25 @@ export function Prompt(props: PromptProps) {
       }
 
       sessionID = res.data.id
+      routeRecord = {
+        kind: "created",
+        title: res.data.title,
+        reason: "new session",
+      }
+    }
+    const workspaceSession = sync.session.get(sessionID)
+    const workspaceID = workspaceSession?.workspaceID
+    const workspaceStatus = workspaceID ? (project.workspace.status(workspaceID) ?? "error") : undefined
+    if (workspaceID && workspaceStatus !== "connected") {
+      dialog.replace(() => (
+        <DialogWorkspaceUnavailable
+          onRestore={() => {
+            workspace.open()
+            return false
+          }}
+        />
+      ))
+      return false
     }
     const editorSelection = editorContext()
     const editorParts =
@@ -1152,6 +1171,16 @@ export function Prompt(props: PromptProps) {
           })
         })
       if (editorParts.length > 0) editor.markSelectionSent()
+    }
+    if (routeRecord) {
+      local.session.recordRoute({
+        prompt: inputText,
+        sessionID,
+        title: routeRecord.title,
+        reason: routeRecord.reason,
+        kind: routeRecord.kind,
+        score: routeRecord.score,
+      })
     }
     history.append({
       ...store.prompt,

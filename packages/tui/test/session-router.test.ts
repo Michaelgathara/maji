@@ -19,13 +19,19 @@ function session(input: { id: string; title: string; updated?: number; directory
   }
 }
 
-function route(input: { prompt: string; sessions: Session[]; statuses?: Record<string, SessionStatus> }) {
+function route(input: {
+  prompt: string
+  sessions: Session[]
+  statuses?: Record<string, SessionStatus>
+  currentSessionID?: string
+}) {
   return routePromptToSession({
     prompt: input.prompt,
     sessions: input.sessions,
     statuses: input.statuses ?? {},
     permissions: {},
     questions: {},
+    currentSessionID: input.currentSessionID,
     directory: "/repo",
     now,
   })
@@ -126,6 +132,46 @@ describe("session-router", () => {
     expect(decision?.reason).toBe("conversation match")
   })
 
+  test("switches away from the current session when another session is clearly relevant", () => {
+    const decision = routePromptToSession({
+      prompt: "What did we decide about the landing page copy?",
+      sessions: [
+        session({ id: "a", title: "OAuth callback bug", updated: now - 30_000 }),
+        session({ id: "b", title: "Landing page copy", updated: now - 45 * 60_000 }),
+      ],
+      statuses: { a: { type: "busy" } as SessionStatus },
+      permissions: {},
+      questions: {},
+      currentSessionID: "a",
+      profiles: {
+        a: { text: "We are debugging oauth callback tests and auth redirects." },
+        b: {
+          summary: "Landing page copy decisions for pricing and hero messaging",
+          topics: ["landing page copy", "hero messaging"],
+          intents: ["planning"],
+        },
+      },
+      directory: "/repo",
+      now,
+    })
+
+    expect(decision?.sessionID).toBe("b")
+    expect(decision?.reason).toBe("title match")
+  })
+
+  test("keeps ordinary follow-ups in the current session", () => {
+    const decision = route({
+      prompt: "Can you keep going on auth?",
+      currentSessionID: "a",
+      sessions: [
+        session({ id: "a", title: "OAuth callback bug", updated: now - 30_000 }),
+        session({ id: "b", title: "Auth billing", updated: now - 45_000 }),
+      ],
+    })
+
+    expect(decision).toBeUndefined()
+  })
+
   test("routes using stored session memory even without hydrated transcript", () => {
     const decision = routePromptToSession({
       prompt: "How did the security audit go?",
@@ -181,8 +227,12 @@ describe("session-router", () => {
     })
 
     expect(profile.summary).toContain("Security audit")
+    expect(profile.canonicalTopic).toBe("security audit")
+    expect(profile.taskType).toBe("security audit")
     expect(profile.topics).toContain("security audit")
     expect(profile.intents).toContain("security-audit")
+    expect(profile.currentStatus).toBe("finished with an outcome")
+    expect(profile.outcome).toContain("security audit found")
     expect(profile.lastAssistantReply).toContain("medium-risk auth issues")
   })
 })

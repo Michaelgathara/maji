@@ -45,6 +45,7 @@ import { DialogThemeList } from "./component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
 import { DialogAgent } from "./component/dialog-agent"
 import { DialogSessionList } from "./component/dialog-session-list"
+import { DialogRouteCorrection } from "./component/dialog-route-correction"
 import { DialogWorkspaceList } from "./component/dialog-workspace-list"
 import { DialogConsoleOrg } from "./component/dialog-console-org"
 import { ThemeProvider, useTheme } from "./context/theme"
@@ -582,6 +583,50 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
             type: "home",
           })
           dialog.clear()
+        },
+      },
+      {
+        name: "routing.explain",
+        title: "Explain last route",
+        category: "Routing",
+        slashName: "route",
+        slashAliases: ["route-info"],
+        run: () => {
+          const record = local.session.lastRoute()
+          if (!record) {
+            dialog.replace(() => <DialogAlert title="Routing" message="No routed prompt has been recorded yet." />)
+            return
+          }
+          const routeVerb =
+            record.kind === "created" ? "Created" : record.kind === "corrected" ? "Corrected" : "Routed"
+          const score = record.score === undefined ? "" : `\nScore: ${record.score.toFixed(1)}`
+          const correctedSession = record.correctedTo
+            ? sync.data.session.find((session) => session.id === record.correctedTo)
+            : undefined
+          const corrected = record.correctedTo
+            ? `\nCorrected to: ${correctedSession?.title ?? record.correctedTo}`
+            : ""
+          dialog.replace(() => (
+            <DialogAlert
+              title="Last Route"
+              message={[
+                `Prompt: ${record.prompt}`,
+                `${routeVerb}: ${record.title}`,
+                `Reason: ${record.reason}${score}${corrected}`,
+              ].join("\n")}
+            />
+          ))
+        },
+      },
+      {
+        name: "routing.correct",
+        title: "Reroute last prompt",
+        category: "Routing",
+        slashName: "reroute",
+        slashAliases: ["correct-route"],
+        suggested: local.session.lastRoute() !== undefined,
+        run: () => {
+          dialog.replace(() => <DialogRouteCorrection />)
         },
       },
       {
