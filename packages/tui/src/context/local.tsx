@@ -12,7 +12,7 @@ import { readJson, writeJsonAtomic } from "../util/persistence"
 import { useTheme } from "./theme"
 import { useToast } from "../ui/toast"
 import { useRoute } from "./route"
-import { buildSessionRoutingMemory, type SessionRoutingMemory } from "../session-router"
+import type { SessionRoutingCard } from "@opencode-ai/sdk/v2"
 
 export type SessionRoutingRecord = {
   id: string
@@ -428,12 +428,14 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       const [sessionStore, setSessionStore] = createStore<{
         ready: boolean
         pinned: string[]
-        routing: Record<string, SessionRoutingMemory>
+        // Routing cards are owned by the server (session_routing table);
+        // this is just the latest fetched snapshot and is never persisted.
+        cards: Record<string, SessionRoutingCard>
         routeHistory: SessionRoutingRecord[]
       }>({
         ready: false,
         pinned: [],
-        routing: {},
+        cards: {},
         routeHistory: [],
       })
 
@@ -450,7 +452,6 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         state.pending = false
         void writeJsonAtomic(filePath, {
           pinned: sessionStore.pinned,
-          routing: sessionStore.routing,
           routeHistory: sessionStore.routeHistory,
         })
       }
@@ -459,27 +460,12 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         .then((x) => {
           if (!x || typeof x !== "object") return
           const pinned = (x as Record<string, unknown>).pinned
-          const routing = (x as Record<string, unknown>).routing
           const routeHistory = (x as Record<string, unknown>).routeHistory
           if (Array.isArray(pinned))
             setSessionStore(
               "pinned",
               pinned.filter((item): item is string => typeof item === "string"),
             )
-          if (routing && typeof routing === "object") {
-            const entries = Object.entries(routing).filter(
-              (entry): entry is [string, SessionRoutingMemory] =>
-                typeof entry[0] === "string" &&
-                !!entry[1] &&
-                typeof entry[1] === "object" &&
-                entry[1].version === 1 &&
-                typeof entry[1].fingerprint === "string" &&
-                Array.isArray(entry[1].topics) &&
-                Array.isArray(entry[1].intents) &&
-                Array.isArray(entry[1].files),
-            )
-            setSessionStore("routing", Object.fromEntries(entries))
-          }
           if (Array.isArray(routeHistory)) {
             setSessionStore(
               "routeHistory",
@@ -511,10 +497,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               sessionStore.pinned.filter((x) => x !== sessionID),
             )
           }
-          if (sessionStore.routing[sessionID]) {
+          if (sessionStore.cards[sessionID]) {
             setSessionStore(
-              "routing",
-              Object.fromEntries(Object.entries(sessionStore.routing).filter(([id]) => id !== sessionID)),
+              "cards",
+              Object.fromEntries(Object.entries(sessionStore.cards).filter(([id]) => id !== sessionID)),
             )
           }
           setSessionStore(
@@ -532,16 +518,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       createEffect(() => {
         if (!sessionStore.ready || !sync.ready) return
         const valid = new Set(sync.data.session.filter((item) => !item.parentID && !item.time.archived).map((item) => item.id))
-        const stale = Object.keys(sessionStore.routing).filter((id) => !valid.has(id))
         const staleHistory = sessionStore.routeHistory.filter(
           (item) => !valid.has(item.sessionID) && (!item.correctedTo || !valid.has(item.correctedTo)),
         )
-        if (stale.length === 0 && staleHistory.length === 0) return
+        if (staleHistory.length === 0) return
         batch(() => {
-          setSessionStore(
-            "routing",
-            Object.fromEntries(Object.entries(sessionStore.routing).filter(([id]) => valid.has(id))),
-          )
           setSessionStore(
             "routeHistory",
             sessionStore.routeHistory.filter(
@@ -552,36 +533,22 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         })
       })
 
-      createEffect(() => {
-        if (!sessionStore.ready || !sync.ready) return
-        const updates = sync.data.session
-          .filter((item) => !item.parentID && !item.time.archived)
-          .toSorted((a, b) => b.time.updated - a.time.updated)
-          .slice(0, 32)
-          .flatMap((session) => {
-            const messages = sync.data.message[session.id]
-            if (!messages?.length) return []
-            const memory = buildSessionRoutingMemory({
-              session,
-              messages,
-              parts: sync.data.part,
-              status: sync.data.session_status[session.id],
-              pendingInput: (sync.data.permission[session.id]?.length ?? 0) + (sync.data.question[session.id]?.length ?? 0),
-            })
-            const current = sessionStore.routing[session.id]
-            if (current?.fingerprint === memory.fingerprint) return []
-            return [[session.id, memory] as const]
-          })
-
-        if (updates.length === 0) return
-
-        batch(() => {
-          for (const [sessionID, memory] of updates) {
-            setSessionStore("routing", sessionID, memory)
+      let refreshingCards = false
+      async function refreshRouting() {
+        if (refreshingCards) return
+        refreshingCards = true
+        try {
+          const res = await sdk.client.session.routeCards()
+          if (res.data) {
+            setSessionStore("cards", Object.fromEntries(res.data.map((entry) => [entry.sessionID, entry.card])))
           }
-          save()
-        })
-      })
+        } catch {
+          // routing cards are advisory; ignore fetch failures
+        } finally {
+          refreshingCards = false
+        }
+      }
+      void refreshRouting()
 
       return {
         get ready() {
@@ -592,8 +559,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         },
         slots,
         routing(sessionID: string) {
-          return sessionStore.routing[sessionID]
+          return sessionStore.cards[sessionID]
         },
+        refreshRouting,
         routeHistory() {
           return sessionStore.routeHistory
         },

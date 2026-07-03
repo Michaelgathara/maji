@@ -21,7 +21,7 @@ export const Card = Schema.Struct({
   lastUserPrompt: Schema.optional(Schema.String),
   lastAssistantReply: Schema.optional(Schema.String),
   text: Schema.String.annotate({ description: "Bounded recent conversation text used for lexical routing" }),
-  updatedAt: Schema.Number,
+  updatedAt: Schema.Finite,
 }).annotate({ identifier: "SessionRoutingCard" })
 export interface Card extends Schema.Schema.Type<typeof Card> {}
 
@@ -34,7 +34,7 @@ export interface CardEntry extends Schema.Schema.Type<typeof CardEntry> {}
 export const Candidate = Schema.Struct({
   sessionID: SessionID,
   title: Schema.String,
-  score: Schema.Number,
+  score: Schema.Finite,
   reason: Schema.String,
 }).annotate({ identifier: "SessionRouteCandidate" })
 export interface Candidate extends Schema.Schema.Type<typeof Candidate> {}

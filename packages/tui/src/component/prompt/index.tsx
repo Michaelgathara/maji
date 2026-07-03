@@ -56,7 +56,6 @@ import { useTuiConfig } from "../../config"
 import { usePromptWorkspace } from "./workspace"
 import { usePromptMove } from "./move"
 import { readLocalAttachment } from "./local-attachment"
-import { buildSessionRouteProfile, routePromptToSession } from "../../session-router"
 
 export type PromptProps = {
   sessionID?: string
@@ -923,21 +922,18 @@ export function Prompt(props: PromptProps) {
     }
   })
 
-  function routingProfiles() {
-    return Object.fromEntries(
-      sync.data.session.map((session) => {
-        const messages = sync.data.message[session.id]
-        return [
-          session.id,
-          buildSessionRouteProfile({
-            session,
-            memory: local.session.routing(session.id),
-            messages,
-            parts: sync.data.part,
-          }),
-        ]
-      }),
-    )
+  async function routePrompt(text: string) {
+    // Routing is a server capability; if the call fails, fall back to the
+    // current session rather than blocking the send.
+    try {
+      const res = await sdk.client.session.route({
+        text,
+        currentSessionID: props.sessionID,
+      })
+      return res.data?.decision
+    } catch {
+      return undefined
+    }
   }
 
   let submitting = false
@@ -1012,16 +1008,7 @@ export function Prompt(props: PromptProps) {
     let finishMoveProgress = false
     const routing =
       currentMode === "normal" && !inputText.startsWith("/") && !move.pendingNew()
-        ? routePromptToSession({
-            prompt: inputText,
-            sessions: sync.data.session,
-            statuses: sync.data.session_status,
-            permissions: sync.data.permission,
-            questions: sync.data.question,
-            profiles: routingProfiles(),
-            currentSessionID: props.sessionID,
-            directory: sync.path.directory || paths.cwd,
-          })
+        ? await routePrompt(inputText)
         : undefined
     if (routing && routing.sessionID !== sessionID) {
       sessionID = routing.sessionID

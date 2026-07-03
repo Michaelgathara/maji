@@ -17,6 +17,8 @@ export function DialogRouteCorrection() {
   const route = useRoute()
   const toast = useToast()
 
+  void local.session.refreshRouting()
+
   const record = createMemo(() => local.session.lastRoute())
   const sessions = createMemo(() => new Map(sync.data.session.map((session) => [session.id, session])))
   const currentTarget = createMemo(() => {

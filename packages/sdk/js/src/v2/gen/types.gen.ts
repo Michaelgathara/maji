@@ -2538,7 +2538,7 @@ export type ProviderAuthError1 = {
 export type SessionRouteCandidate = {
   sessionID: string
   title: string
-  score: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  score: number
   reason: string
 }
 
@@ -2565,7 +2565,7 @@ export type SessionRoutingCard = {
    * Bounded recent conversation text used for lexical routing
    */
   text: string
-  updatedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  updatedAt: number
 }
 
 export type SessionRoutingCardEntry = {
