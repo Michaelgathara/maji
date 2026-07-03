@@ -1020,7 +1020,7 @@ export function Prompt(props: PromptProps) {
       }
       toast.show({
         message: props.sessionID
-          ? `Sent to ${Locale.truncate(routing.title, 36)} (${routing.reason})`
+          ? `Switched to ${Locale.truncate(routing.title, 36)} (${routing.reason})`
           : `Routed to ${Locale.truncate(routing.title, 36)} (${routing.reason})`,
         variant: "success",
         duration: 2500,
@@ -1181,9 +1181,11 @@ export function Prompt(props: PromptProps) {
     setStore("extmarkToPartIndex", new Map())
     props.onSubmit?.()
 
-    // temporary hack to make sure the message is sent
-    if (!props.sessionID) {
-      if (editorParts.length > 0) editor.preserveSelectionFromNewSession()
+    if (!props.sessionID && editorParts.length > 0) editor.preserveSelectionFromNewSession()
+    // Follow the message: the conversation continues wherever it was routed
+    // or created, while the previous session keeps working in the background.
+    // Deferred so the send settles before this component unmounts.
+    if (!props.sessionID || routeRecord?.kind === "routed") {
       setTimeout(() => {
         route.navigate({
           type: "session",

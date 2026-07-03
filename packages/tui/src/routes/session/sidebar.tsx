@@ -1,6 +1,7 @@
 import { useProject } from "../../context/project"
+import { useRoute } from "../../context/route"
 import { useSync } from "../../context/sync"
-import { createMemo, Show } from "solid-js"
+import { createMemo, For, Show } from "solid-js"
 import { useTheme } from "../../context/theme"
 import { useTuiConfig } from "../../config"
 import { InstallationChannel, InstallationVersion } from "@opencode-ai/core/installation/version"
@@ -8,6 +9,8 @@ import { usePluginRuntime } from "../../plugin/runtime"
 
 import { getScrollAcceleration } from "../../util/scroll"
 import { WorkspaceLabel } from "../../component/workspace-label"
+import { Spinner } from "../../component/spinner"
+import { Locale } from "../../util/locale"
 
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const pluginRuntime = usePluginRuntime()
@@ -86,6 +89,8 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
           </box>
         </scrollbox>
 
+        <OtherSessions sessionID={props.sessionID} />
+
         <box flexShrink={0} gap={1} paddingTop={1}>
           <pluginRuntime.Slot name="sidebar_footer" mode="single_winner" session_id={props.sessionID}>
             <text fg={theme.textMuted}>
@@ -97,6 +102,68 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
             </text>
           </pluginRuntime.Slot>
         </box>
+      </box>
+    </Show>
+  )
+}
+
+// Other sessions that are running or waiting for the user, so switching
+// away from a working session never loses sight of it.
+function OtherSessions(props: { sessionID: string }) {
+  const sync = useSync()
+  const route = useRoute()
+  const { theme } = useTheme()
+
+  const items = createMemo(() =>
+    sync.data.session
+      .filter((session) => !session.parentID && !session.time.archived && session.id !== props.sessionID)
+      .map((session) => {
+        const pending =
+          (sync.data.permission[session.id]?.length ?? 0) + (sync.data.question[session.id]?.length ?? 0)
+        const status = sync.data.session_status[session.id]
+        return {
+          session,
+          pending,
+          busy: !!status && status.type !== "idle",
+        }
+      })
+      .filter((item) => item.pending > 0 || item.busy)
+      .toSorted(
+        (a, b) =>
+          (b.pending > 0 ? 1 : 0) - (a.pending > 0 ? 1 : 0) || b.session.time.updated - a.session.time.updated,
+      )
+      .slice(0, 5),
+  )
+
+  return (
+    <Show when={items().length > 0}>
+      <box flexShrink={0} gap={1} paddingTop={1}>
+        <text fg={theme.text}>
+          <b>Other sessions</b>
+        </text>
+        <For each={items()}>
+          {(item) => (
+            <box
+              flexDirection="row"
+              justifyContent="space-between"
+              gap={1}
+              paddingLeft={1}
+              paddingRight={1}
+              backgroundColor={theme.backgroundElement}
+              onMouseUp={() => route.navigate({ type: "session", sessionID: item.session.id })}
+            >
+              <text fg={theme.text}>{Locale.truncate(item.session.title || "Untitled session", 24)}</text>
+              <box flexDirection="row" gap={1} flexShrink={0}>
+                <Show when={item.pending === 0 && item.busy}>
+                  <Spinner color={theme.success} />
+                </Show>
+                <text fg={item.pending > 0 ? theme.warning : theme.success}>
+                  {item.pending > 0 ? "input" : "working"}
+                </text>
+              </box>
+            </box>
+          )}
+        </For>
       </box>
     </Show>
   )
