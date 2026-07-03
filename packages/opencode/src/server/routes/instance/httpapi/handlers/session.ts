@@ -10,6 +10,7 @@ import { SessionCompaction } from "@/session/compaction"
 import { MessageV2 } from "@/session/message-v2"
 import { SessionPrompt } from "@/session/prompt"
 import { SessionRevert } from "@/session/revert"
+import { SessionRouting } from "@/session/routing"
 import { SessionRunState } from "@/session/run-state"
 import { SessionStatus } from "@/session/status"
 import { SessionSummary } from "@/session/summary"
@@ -31,6 +32,7 @@ import {
   PermissionResponsePayload,
   PromptPayload,
   RevertPayload,
+  RoutePayload,
   ShellPayload,
   SummarizePayload,
   UpdatePayload,
@@ -57,6 +59,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     const statusSvc = yield* SessionStatus.Service
     const todoSvc = yield* Todo.Service
     const summary = yield* SessionSummary.Service
+    const routing = yield* SessionRouting.Service
     const events = yield* EventV2Bridge.Service
     const scope = yield* Scope.Scope
 
@@ -74,6 +77,14 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
 
     const status = Effect.fn("SessionHttpApi.status")(function* () {
       return Object.fromEntries(yield* statusSvc.list())
+    })
+
+    const route = Effect.fn("SessionHttpApi.route")(function* (ctx: { payload: typeof RoutePayload.Type }) {
+      return yield* routing.route(ctx.payload)
+    })
+
+    const routeCards = Effect.fn("SessionHttpApi.routeCards")(function* () {
+      return yield* routing.cards()
     })
 
     const requireSession = Effect.fn("SessionHttpApi.requireSession")(function* (sessionID: SessionID) {
@@ -411,6 +422,8 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     return handlers
       .handle("list", list)
       .handle("status", status)
+      .handle("route", route)
+      .handle("routeCards", routeCards)
       .handle("get", get)
       .handle("children", children)
       .handle("todo", todo)

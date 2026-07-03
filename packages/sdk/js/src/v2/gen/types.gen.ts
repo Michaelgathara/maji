@@ -2535,6 +2535,44 @@ export type ProviderAuthError1 = {
   }
 }
 
+export type SessionRouteCandidate = {
+  sessionID: string
+  title: string
+  score: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  reason: string
+}
+
+export type SessionRouteResult = {
+  decision?: SessionRouteCandidate
+  candidates: Array<SessionRouteCandidate>
+}
+
+export type SessionRoutingCard = {
+  version: 1
+  summary?: string
+  canonicalTopic?: string
+  taskType?: string
+  topics: Array<string>
+  intents: Array<string>
+  files: Array<string>
+  statusHint?: "needs-input" | "active" | "done" | "idle"
+  currentStatus?: string
+  outcome?: string
+  openQuestions: Array<string>
+  lastUserPrompt?: string
+  lastAssistantReply?: string
+  /**
+   * Bounded recent conversation text used for lexical routing
+   */
+  text: string
+  updatedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+}
+
+export type SessionRoutingCardEntry = {
+  sessionID: string
+  card: SessionRoutingCard
+}
+
 export type NotFoundError = {
   name: "NotFoundError"
   data: {
@@ -9536,6 +9574,65 @@ export type SessionStatusResponses = {
 }
 
 export type SessionStatusResponse = SessionStatusResponses[keyof SessionStatusResponses]
+
+export type SessionRouteData = {
+  body?: {
+    text: string
+    currentSessionID?: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/route"
+}
+
+export type SessionRouteErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+}
+
+export type SessionRouteError = SessionRouteErrors[keyof SessionRouteErrors]
+
+export type SessionRouteResponses = {
+  /**
+   * Route decision with ranked candidates
+   */
+  200: SessionRouteResult
+}
+
+export type SessionRouteResponse = SessionRouteResponses[keyof SessionRouteResponses]
+
+export type SessionRouteCardsData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/route/cards"
+}
+
+export type SessionRouteCardsErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+}
+
+export type SessionRouteCardsError = SessionRouteCardsErrors[keyof SessionRouteCardsErrors]
+
+export type SessionRouteCardsResponses = {
+  /**
+   * Routing cards
+   */
+  200: Array<SessionRoutingCardEntry>
+}
+
+export type SessionRouteCardsResponse = SessionRouteCardsResponses[keyof SessionRouteCardsResponses]
 
 export type SessionDeleteData = {
   body?: never

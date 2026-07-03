@@ -10,6 +10,7 @@ import { SessionStatus } from "@/session/status"
 import { SessionSummary } from "@/session/summary"
 import { Todo } from "@/session/todo"
 import { MessageID, PartID, SessionID } from "@/session/schema"
+import { SessionRouting } from "@opencode-ai/schema/session-routing"
 import { Snapshot } from "@/snapshot"
 import { Schema, Struct } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
@@ -74,10 +75,16 @@ export const RevertPayload = Schema.Struct(Struct.omit(SessionRevert.RevertInput
 export const PermissionResponsePayload = Schema.Struct({
   response: PermissionV1.Reply,
 })
+export const RoutePayload = Schema.Struct({
+  text: Schema.String,
+  currentSessionID: Schema.optional(SessionID),
+})
 
 export const SessionPaths = {
   list: root,
   status: `${root}/status`,
+  route: `${root}/route`,
+  routeCards: `${root}/route/cards`,
   get: `${root}/:sessionID`,
   children: `${root}/:sessionID/children`,
   todo: `${root}/:sessionID/todo`,
@@ -127,6 +134,31 @@ export const SessionApi = HttpApi.make("session")
             identifier: "session.status",
             summary: "Get session status",
             description: "Retrieve the current status of all sessions, including active, idle, and completed states.",
+          }),
+        ),
+        HttpApiEndpoint.post("route", SessionPaths.route, {
+          query: WorkspaceRoutingQuery,
+          payload: RoutePayload,
+          success: described(SessionRouting.RouteResult, "Route decision with ranked candidates"),
+          error: HttpApiError.BadRequest,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.route",
+            summary: "Route a prompt",
+            description:
+              "Decide which existing session a prompt most likely belongs to, returning ranked candidates and a decision when one session is clearly best.",
+          }),
+        ),
+        HttpApiEndpoint.get("routeCards", SessionPaths.routeCards, {
+          query: WorkspaceRoutingQuery,
+          success: described(Schema.Array(SessionRouting.CardEntry), "Routing cards"),
+          error: HttpApiError.BadRequest,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.routeCards",
+            summary: "Get routing cards",
+            description:
+              "Get the per-session routing cards (summary, topics, files, status) used to route prompts between sessions.",
           }),
         ),
         HttpApiEndpoint.get("get", SessionPaths.get, {
