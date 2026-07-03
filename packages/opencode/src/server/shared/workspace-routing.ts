@@ -23,7 +23,8 @@ export function getWorkspaceRouteSessionID(url: URL) {
   const id =
     url.pathname.match(/^\/session\/([^/]+)(?:\/|$)/)?.[1] ??
     url.pathname.match(/^\/experimental\/session\/([^/]+)\/background$/)?.[1]
-  if (!id) return null
+  // Static segments such as /session/route are not session IDs.
+  if (!id || !id.startsWith("ses")) return null
 
   return SessionID.make(id)
 }
