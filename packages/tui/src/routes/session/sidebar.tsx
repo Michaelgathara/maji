@@ -11,6 +11,7 @@ import { getScrollAcceleration } from "../../util/scroll"
 import { WorkspaceLabel } from "../../component/workspace-label"
 import { Spinner } from "../../component/spinner"
 import { Locale } from "../../util/locale"
+import { createElsewhere } from "../../component/elsewhere"
 
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const pluginRuntime = usePluginRuntime()
@@ -110,30 +111,9 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
 // Other sessions that are running or waiting for the user, so switching
 // away from a working session never loses sight of it.
 function OtherSessions(props: { sessionID: string }) {
-  const sync = useSync()
   const route = useRoute()
   const { theme } = useTheme()
-
-  const items = createMemo(() =>
-    sync.data.session
-      .filter((session) => !session.parentID && !session.time.archived && session.id !== props.sessionID)
-      .map((session) => {
-        const pending =
-          (sync.data.permission[session.id]?.length ?? 0) + (sync.data.question[session.id]?.length ?? 0)
-        const status = sync.data.session_status[session.id]
-        return {
-          session,
-          pending,
-          busy: !!status && status.type !== "idle",
-        }
-      })
-      .filter((item) => item.pending > 0 || item.busy)
-      .toSorted(
-        (a, b) =>
-          (b.pending > 0 ? 1 : 0) - (a.pending > 0 ? 1 : 0) || b.session.time.updated - a.session.time.updated,
-      )
-      .slice(0, 5),
-  )
+  const items = createElsewhere(() => props.sessionID)
 
   return (
     <Show when={items().length > 0}>

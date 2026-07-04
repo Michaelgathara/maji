@@ -97,6 +97,7 @@ const appGlobalBindingCommands = [
   "session.quick_switch.7",
   "session.quick_switch.8",
   "session.quick_switch.9",
+  "session.attention.jump",
 ] as const
 
 const appBindingCommands = [
@@ -663,6 +664,16 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
           local.session.quickSwitch(i + 1)
         },
       })),
+      {
+        name: "session.attention.jump",
+        title: "Jump to session needing attention",
+        category: "Session",
+        slashName: "attention",
+        run: () => {
+          dialog.clear()
+          local.session.attentionJump()
+        },
+      },
       {
         name: "model.list",
         title: "Switch model",

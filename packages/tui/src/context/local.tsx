@@ -609,6 +609,31 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           if (route.data.type === "session" && route.data.sessionID === target) return
           route.navigate({ type: "session", sessionID: target })
         },
+        attentionJump() {
+          const current = route.data.type === "session" ? route.data.sessionID : undefined
+          const candidates = sync.data.session
+            .filter((session) => !session.parentID && !session.time.archived)
+            .map((session) => {
+              const pending =
+                (sync.data.permission[session.id]?.length ?? 0) + (sync.data.question[session.id]?.length ?? 0)
+              const status = sync.data.session_status[session.id]
+              return { session, pending, busy: !!status && status.type !== "idle" }
+            })
+            .filter((item) => item.pending > 0 || item.busy)
+            .toSorted(
+              (a, b) =>
+                (b.pending > 0 ? 1 : 0) - (a.pending > 0 ? 1 : 0) ||
+                b.session.time.updated - a.session.time.updated,
+            )
+          // Prefer somewhere new so repeated presses hop between active sessions.
+          const target = candidates.find((item) => item.session.id !== current) ?? candidates[0]
+          if (!target) {
+            toast.show({ message: "Nothing needs attention", variant: "info", duration: 1500 })
+            return
+          }
+          if (target.session.id === current) return
+          route.navigate({ type: "session", sessionID: target.session.id })
+        },
       }
     }
 
