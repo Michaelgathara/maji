@@ -936,50 +936,103 @@ export function Prompt(props: PromptProps) {
     }
   }
 
-  // Pre-send route preview: the destination is decided (and shown) while
-  // typing, so pressing enter is a confirmation instead of a gamble.
-  type RouteTarget =
-    | { type: "session"; sessionID: string; title: string; reason: string }
-    | { type: "new" }
-    | { type: "stay" }
+  // Pre-send route preview: build the same delivery plan that submit will
+  // execute, so pressing enter confirms a visible decision instead of guessing.
+  type RouteCandidate = { sessionID: string; title: string; reason: string; score?: number }
+  type RouteTarget = ({ type: "session" } & RouteCandidate) | { type: "new" } | { type: "stay" }
 
   type RoutePreview = {
     text: string
-    decision?: { sessionID: string; title: string; reason: string }
-    candidates: { sessionID: string; title: string; reason: string }[]
+    currentSessionID?: string
+    decision?: RouteCandidate
+    candidates: RouteCandidate[]
   }
 
+  type RouteOverride = {
+    text: string
+    currentSessionID?: string
+    target: RouteTarget
+  }
+
+  type RouteDraft = {
+    text: string
+    currentSessionID?: string
+  }
+
+  type DeliverySource = "automatic" | "manual"
+
   const [routePreview, setRoutePreview] = createSignal<RoutePreview | undefined>()
-  const [routeOverride, setRouteOverride] = createSignal<RouteTarget | undefined>()
+  const [routeOverride, setRouteOverride] = createSignal<RouteOverride | undefined>()
   const routeCycleShortcut = useCommandShortcut("prompt.route.cycle")
+
+  function expandedPromptText() {
+    return expandTrackedPastedText(
+      store.prompt.input,
+      store.prompt.parts.flatMap((part) => {
+        if (part.type !== "text" || !part.source?.text) return []
+        return [{ start: part.source.text.start, end: part.source.text.end, text: part.text }]
+      }),
+    )
+  }
+
+  const routeDraft = createMemo<RouteDraft | undefined>(() => {
+    const text = expandedPromptText()
+    if (!text || store.mode !== "normal" || text.startsWith("/") || move.pendingNew()) return undefined
+    return { text, currentSessionID: props.sessionID }
+  })
+
+  function sameRouteDraft(value: RoutePreview | RouteOverride, draft: RouteDraft | undefined) {
+    return draft !== undefined && value.text === draft.text && value.currentSessionID === draft.currentSessionID
+  }
+
+  const currentRoutePreview = createMemo(() => {
+    const preview = routePreview()
+    if (!preview || !sameRouteDraft(preview, routeDraft())) return undefined
+    return preview
+  })
+
+  const currentRouteOverride = createMemo(() => {
+    const override = routeOverride()
+    if (!override || !sameRouteDraft(override, routeDraft())) return undefined
+    return override
+  })
 
   let routeTimer: ReturnType<typeof setTimeout> | undefined
   let routeSeq = 0
   createEffect(
     on(
-      () => [store.prompt.input, store.mode] as const,
-      ([value, mode]) => {
+      () => [routeDraft()?.text, routeDraft()?.currentSessionID] as const,
+      ([text, currentSessionID]) => {
         if (routeTimer) clearTimeout(routeTimer)
         routeSeq++
-        if (!value || mode !== "normal" || value.startsWith("/") || move.pendingNew()) {
-          setRoutePreview(undefined)
-          setRouteOverride(undefined)
+        setRoutePreview(undefined)
+        setRouteOverride((override) => {
+          if (override && override.text === text && override.currentSessionID === currentSessionID) return override
+          return undefined
+        })
+        if (!text) {
           return
         }
         const seq = routeSeq
         routeTimer = setTimeout(() => {
           sdk.client.session
-            .route({ text: value, currentSessionID: props.sessionID })
+            .route({ text, currentSessionID })
             .then((res) => {
               if (seq !== routeSeq) return
-              if (!res.data) return
+              if (!res.data) {
+                setRoutePreview(undefined)
+                return
+              }
               setRoutePreview({
-                text: value,
+                text,
+                currentSessionID,
                 decision: res.data.decision ?? undefined,
                 candidates: [...res.data.candidates],
               })
             })
-            .catch(() => {})
+            .catch(() => {
+              if (seq === routeSeq) setRoutePreview(undefined)
+            })
         }, 300)
       },
     ),
@@ -989,22 +1042,20 @@ export function Prompt(props: PromptProps) {
   })
 
   const routeTargets = createMemo<RouteTarget[]>(() => {
-    const targets: RouteTarget[] = []
-    for (const candidate of routePreview()?.candidates ?? []) {
-      if (candidate.sessionID === props.sessionID) continue
-      targets.push({ type: "session", sessionID: candidate.sessionID, title: candidate.title, reason: candidate.reason })
-    }
-    targets.push({ type: "new" })
-    if (props.sessionID) targets.push({ type: "stay" })
-    return targets
+    const candidateTargets = (currentRoutePreview()?.candidates ?? [])
+      .filter((candidate) => candidate.sessionID !== props.sessionID)
+      .map((candidate): RouteTarget => ({ type: "session", ...candidate }))
+    if (!routeDraft()) return []
+    if (!props.sessionID) return [...candidateTargets, { type: "new" }]
+    return [...candidateTargets, { type: "new" }, { type: "stay" }]
   })
 
   const routeTarget = createMemo<RouteTarget>(() => {
-    const override = routeOverride()
-    if (override) return override
-    const decision = routePreview()?.decision
+    const override = currentRouteOverride()
+    if (override) return override.target
+    const decision = currentRoutePreview()?.decision
     if (decision && decision.sessionID !== props.sessionID) {
-      return { type: "session", sessionID: decision.sessionID, title: decision.title, reason: decision.reason }
+      return { type: "session", ...decision }
     }
     return props.sessionID ? { type: "stay" } : { type: "new" }
   })
@@ -1016,24 +1067,47 @@ export function Prompt(props: PromptProps) {
   }
 
   function cycleRouteTarget() {
+    const draft = routeDraft()
     const targets = routeTargets()
-    if (targets.length === 0) return
+    if (!draft || targets.length === 0) return
     const index = targets.findIndex((target) => sameRouteTarget(target, routeTarget()))
-    setRouteOverride(targets[(index + 1) % targets.length])
+    setRouteOverride({
+      text: draft.text,
+      currentSessionID: draft.currentSessionID,
+      target: targets[(index + 1) % targets.length],
+    })
   }
 
-  const routeIndicator = createMemo(() => {
-    if (store.mode !== "normal") return
-    if (!store.prompt.input || store.prompt.input.startsWith("/")) return
-    if (auto()?.visible) return
+  const deliveryPlan = createMemo(() => {
+    if (!routeDraft()) return undefined
+    if (auto()?.visible) return undefined
     const target = routeTarget()
-    const overridden = routeOverride() !== undefined
-    if (target.type === "stay" && !overridden) return
+    const source: DeliverySource = currentRouteOverride() ? "manual" : "automatic"
+    if (target.type === "stay" && source !== "manual") return undefined
     // A lone "new session" on home is the obvious default; only surface it
     // once there are real alternatives or the user started cycling.
-    if (target.type === "new" && !props.sessionID && !overridden && routeTargets().length <= 1) return
-    return { target, overridden }
+    if (target.type === "new" && !props.sessionID && source !== "manual" && routeTargets().length <= 1) return undefined
+    return { target, source }
   })
+
+  function routeTargetIntent(target: RouteTarget) {
+    if (target.type === "session") return "send to"
+    if (target.type === "new") return "start"
+    return "send here"
+  }
+
+  function routeTargetLabel(target: RouteTarget) {
+    if (target.type === "session") return Locale.truncate(target.title, 36)
+    if (target.type === "new") return "new session"
+    return "current session"
+  }
+
+  function routeTargetDetail(plan: { target: RouteTarget; source: DeliverySource }) {
+    if (plan.source === "manual") return "manual"
+    if (plan.target.type === "session") return plan.target.reason
+    if (plan.target.type === "new") return "no match"
+    return "current"
+  }
 
   useBindings(() => {
     return {
@@ -1041,10 +1115,8 @@ export function Prompt(props: PromptProps) {
       enabled:
         inputTarget() !== undefined &&
         !props.disabled &&
-        store.mode === "normal" &&
         !auto()?.visible &&
-        store.prompt.input !== "" &&
-        !store.prompt.input.startsWith("/") &&
+        routeDraft() !== undefined &&
         routeTargets().length > 1,
       commands: [
         {
@@ -1105,16 +1177,7 @@ export function Prompt(props: PromptProps) {
     }
 
     const variant = local.model.variant.current()
-    const rawInput = store.prompt.input
-    const inputText = expandTrackedPastedText(
-      store.prompt.input,
-      input.extmarks.getAllForTypeId(promptPartTypeId).flatMap((extmark) => {
-        const partIndex = store.extmarkToPartIndex.get(extmark.id)
-        const part = partIndex === undefined ? undefined : store.prompt.parts[partIndex]
-        if (part?.type !== "text") return []
-        return [{ start: extmark.start, end: extmark.end, text: part.text }]
-      }),
-    )
+    const inputText = expandedPromptText()
 
     // Filter out text parts (pasted content) since they're now expanded inline
     const nonTextParts = store.prompt.parts.filter((part) => part.type !== "text")
@@ -1131,20 +1194,23 @@ export function Prompt(props: PromptProps) {
         }
       | undefined
     let finishMoveProgress = false
-    // What the user saw is what happens: honor an explicit override first,
-    // then a preview that still matches the text; only re-route at submit
-    // time when the preview is stale.
     const routingEligible = currentMode === "normal" && !inputText.startsWith("/") && !move.pendingNew()
+    const routeScope = { text: inputText, currentSessionID: props.sessionID }
     const override = routingEligible ? routeOverride() : undefined
-    const preview = routePreview()
-    let routing: { sessionID: string; title: string; reason: string; score?: number } | undefined
+    const preview = routingEligible ? routePreview() : undefined
+    let routing: RouteCandidate | undefined
     if (routingEligible) {
-      if (override) {
-        if (override.type === "session") {
-          routing = { sessionID: override.sessionID, title: override.title, reason: "manual" }
+      if (override && sameRouteDraft(override, routeScope)) {
+        if (override.target.type === "session") {
+          routing = {
+            sessionID: override.target.sessionID,
+            title: override.target.title,
+            reason: "manual",
+            score: override.target.score,
+          }
         }
-        if (override.type === "new") sessionID = undefined
-      } else if (preview && preview.text === rawInput) {
+        if (override.target.type === "new") sessionID = undefined
+      } else if (preview && sameRouteDraft(preview, routeScope)) {
         routing = preview.decision
       } else {
         routing = await routePrompt(inputText)
@@ -1632,24 +1698,14 @@ export function Prompt(props: PromptProps) {
               cursorColor={props.disabled ? theme.backgroundElement : theme.text}
               syntaxStyle={syntax()}
             />
-            <Show when={routeIndicator()}>
-              {(indicator) => (
+            <Show when={deliveryPlan()}>
+              {(plan) => (
                 <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1}>
                   <text fg={theme.accent}>→</text>
-                  <text fg={theme.text}>
-                    {indicator().target.type === "session"
-                      ? Locale.truncate((indicator().target as { title: string }).title, 36)
-                      : indicator().target.type === "new"
-                        ? "new session"
-                        : "stay here"}
-                  </text>
+                  <text fg={theme.textMuted}>{routeTargetIntent(plan().target)}</text>
+                  <text fg={theme.text}>{routeTargetLabel(plan().target)}</text>
                   <text fg={theme.textMuted}>
-                    ·{" "}
-                    {indicator().overridden
-                      ? "manual"
-                      : indicator().target.type === "session"
-                        ? (indicator().target as { reason: string }).reason
-                        : "no match"}
+                    · {routeTargetDetail(plan())}
                     {routeCycleShortcut() ? ` · ${routeCycleShortcut()} to change` : ""}
                   </text>
                 </box>
