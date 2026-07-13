@@ -599,14 +599,12 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
             return
           }
           const routeVerb =
-            record.kind === "created" ? "Created" : record.kind === "corrected" ? "Corrected" : "Routed"
+            record.kind === "created" ? "Created" : record.kind === "corrected" ? "Sent again" : "Routed"
           const score = record.score === undefined ? "" : `\nScore: ${record.score.toFixed(1)}`
           const correctedSession = record.correctedTo
             ? sync.data.session.find((session) => session.id === record.correctedTo)
             : undefined
-          const corrected = record.correctedTo
-            ? `\nCorrected to: ${correctedSession?.title ?? record.correctedTo}`
-            : ""
+          const corrected = record.correctedTo ? `\nAlso sent to: ${correctedSession?.title ?? record.correctedTo}` : ""
           dialog.replace(() => (
             <DialogAlert
               title="Last Route"
@@ -621,10 +619,10 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       },
       {
         name: "routing.correct",
-        title: "Reroute last prompt",
+        title: "Send last prompt to another task",
         category: "Routing",
-        slashName: "reroute",
-        slashAliases: ["correct-route"],
+        slashName: "resend",
+        slashAliases: ["reroute", "correct-route"],
         suggested: local.session.lastRoute() !== undefined,
         run: () => {
           dialog.replace(() => <DialogRouteCorrection />)
@@ -666,7 +664,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       })),
       {
         name: "session.attention.jump",
-        title: "Jump to session needing attention",
+        title: "Jump to work needing attention",
         category: "Session",
         slashName: "attention",
         run: () => {

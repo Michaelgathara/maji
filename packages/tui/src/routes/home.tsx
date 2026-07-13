@@ -12,7 +12,7 @@ import { useEditorContext } from "../context/editor"
 import { useTerminalDimensions } from "@opentui/solid"
 import { useTuiConfig } from "../config"
 import { HomeSessionDestinationProvider } from "./home/session-destination"
-import { HomeAttentionRail } from "./home/attention-rail"
+import { HomeActivityStrip, HomeAttentionRail } from "./home/attention-rail"
 import { useTheme } from "../context/theme"
 
 let once = false
@@ -110,6 +110,9 @@ export function Home() {
               <Prompt ref={bind} right={<pluginRuntime.Slot name="home_prompt_right" />} placeholders={placeholder} />
             </pluginRuntime.Slot>
           </box>
+          <Show when={!showAttentionRail()}>
+            <HomeActivityStrip />
+          </Show>
           <pluginRuntime.Slot name="home_bottom" />
           <box flexGrow={1} minHeight={0} />
           <Toast />

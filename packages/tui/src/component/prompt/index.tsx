@@ -56,6 +56,15 @@ import { useTuiConfig } from "../../config"
 import { usePromptWorkspace } from "./workspace"
 import { usePromptMove } from "./move"
 import { readLocalAttachment } from "./local-attachment"
+import { DialogRouteTarget } from "../dialog-route-target"
+import {
+  routeTargetAction,
+  routeTargetDetail,
+  routeTargetTitle,
+  type DeliverySource,
+  type RouteCandidate,
+  type RouteTarget,
+} from "./routing-presentation"
 
 export type PromptProps = {
   sessionID?: string
@@ -938,9 +947,6 @@ export function Prompt(props: PromptProps) {
 
   // Pre-send route preview: build the same delivery plan that submit will
   // execute, so pressing enter confirms a visible decision instead of guessing.
-  type RouteCandidate = { sessionID: string; title: string; reason: string; score?: number }
-  type RouteTarget = ({ type: "session" } & RouteCandidate) | { type: "new" } | { type: "stay" }
-
   type RoutePreview = {
     text: string
     currentSessionID?: string
@@ -958,8 +964,6 @@ export function Prompt(props: PromptProps) {
     text: string
     currentSessionID?: string
   }
-
-  type DeliverySource = "automatic" | "manual"
 
   const [routePreview, setRoutePreview] = createSignal<RoutePreview | undefined>()
   const [routeOverride, setRouteOverride] = createSignal<RouteOverride | undefined>()
@@ -1060,22 +1064,24 @@ export function Prompt(props: PromptProps) {
     return props.sessionID ? { type: "stay" } : { type: "new" }
   })
 
-  function sameRouteTarget(a: RouteTarget, b: RouteTarget) {
-    if (a.type !== b.type) return false
-    if (a.type === "session" && b.type === "session") return a.sessionID === b.sessionID
-    return true
-  }
-
-  function cycleRouteTarget() {
+  function chooseRouteTarget() {
     const draft = routeDraft()
     const targets = routeTargets()
     if (!draft || targets.length === 0) return
-    const index = targets.findIndex((target) => sameRouteTarget(target, routeTarget()))
-    setRouteOverride({
-      text: draft.text,
-      currentSessionID: draft.currentSessionID,
-      target: targets[(index + 1) % targets.length],
-    })
+    const selected = routeTarget()
+    dialog.replace(() => (
+      <DialogRouteTarget
+        targets={targets}
+        current={selected}
+        onSelect={(target) => {
+          setRouteOverride({
+            text: draft.text,
+            currentSessionID: draft.currentSessionID,
+            target,
+          })
+        }}
+      />
+    ))
   }
 
   const deliveryPlan = createMemo(() => {
@@ -1090,25 +1096,6 @@ export function Prompt(props: PromptProps) {
     return { target, source }
   })
 
-  function routeTargetIntent(target: RouteTarget) {
-    if (target.type === "session") return "send to"
-    if (target.type === "new") return "start"
-    return "send here"
-  }
-
-  function routeTargetLabel(target: RouteTarget) {
-    if (target.type === "session") return Locale.truncate(target.title, 36)
-    if (target.type === "new") return "new session"
-    return "current session"
-  }
-
-  function routeTargetDetail(plan: { target: RouteTarget; source: DeliverySource }) {
-    if (plan.source === "manual") return "manual"
-    if (plan.target.type === "session") return plan.target.reason
-    if (plan.target.type === "new") return "no match"
-    return "current"
-  }
-
   useBindings(() => {
     return {
       target: inputTarget,
@@ -1121,10 +1108,10 @@ export function Prompt(props: PromptProps) {
       commands: [
         {
           name: "prompt.route.cycle",
-          title: "Cycle where the prompt will be sent",
+          title: "Choose where the prompt will be sent",
           category: "Prompt",
           run() {
-            cycleRouteTarget()
+            chooseRouteTarget()
           },
         },
       ],
@@ -1702,11 +1689,11 @@ export function Prompt(props: PromptProps) {
               {(plan) => (
                 <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1}>
                   <text fg={theme.accent}>→</text>
-                  <text fg={theme.textMuted}>{routeTargetIntent(plan().target)}</text>
-                  <text fg={theme.text}>{routeTargetLabel(plan().target)}</text>
+                  <text fg={theme.textMuted}>{routeTargetAction(plan().target)}</text>
+                  <text fg={theme.text}>{Locale.truncate(routeTargetTitle(plan().target), 36)}</text>
                   <text fg={theme.textMuted}>
-                    · {routeTargetDetail(plan())}
-                    {routeCycleShortcut() ? ` · ${routeCycleShortcut()} to change` : ""}
+                    · {routeTargetDetail(plan().target, plan().source)}
+                    {routeCycleShortcut() ? ` · ${routeCycleShortcut()} choose` : ""}
                   </text>
                 </box>
               )}

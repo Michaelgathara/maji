@@ -151,7 +151,7 @@ export const Definitions = {
   display_thinking: keybind("none", "Toggle thinking blocks visibility"),
 
   prompt_submit: keybind("none", "Submit prompt"),
-  prompt_route_cycle: keybind("ctrl+o", "Cycle where the prompt will be sent"),
+  prompt_route_cycle: keybind("ctrl+o", "Choose where the prompt will be sent"),
   prompt_editor_context_clear: keybind("none", "Clear editor context"),
   prompt_skills: keybind("none", "Open skill selector"),
   prompt_stash: keybind("none", "Stash prompt"),
