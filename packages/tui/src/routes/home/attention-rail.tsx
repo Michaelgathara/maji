@@ -6,15 +6,13 @@ import { Locale } from "../../util/locale"
 import { Spinner } from "../../component/spinner"
 import { useLocal } from "../../context/local"
 import { useCommandShortcut } from "../../keymap"
-import { compareWorkActivity, workStatus, workStatusLabel, type WorkStatus } from "./activity"
+import { compareWorkActivity, workDescription, workStatus, workStatusLabel, type WorkStatus } from "./activity"
 
 export function HomeAttentionRail() {
   const route = useRoute()
   const sync = useSync()
   const local = useLocal()
   const { theme } = useTheme()
-
-  void local.session.refreshRouting()
 
   const sessions = createMemo(() => new Map(sync.data.session.map((session) => [session.id, session])))
   const needsInput = createMemo(() => {
@@ -52,14 +50,15 @@ export function HomeAttentionRail() {
       .filter((session) => !session.parentID && !session.time.archived)
       .map((session) => {
         const memory = local.session.routing(session.id)
+        const status = workStatus({
+          pending: inputCount(session.id),
+          busy: isWorking(session.id),
+          statusHint: memory?.statusHint,
+        })
         return {
           session,
-          status: workStatus({
-            pending: inputCount(session.id),
-            busy: isWorking(session.id),
-            statusHint: memory?.statusHint,
-          }),
-          summary: memory?.summary,
+          status,
+          description: workDescription({ ...memory, status }),
           updated: session.time.updated,
         }
       })
@@ -130,7 +129,7 @@ export function HomeAttentionRail() {
             {(item) => (
               <SessionItem
                 title={item.session.title}
-                subtitle={item.summary ?? relativeTime(item.updated)}
+                subtitle={item.description ?? relativeTime(item.updated)}
                 status={workStatusLabel(item.status)}
                 statusColor={statusColor(item.status)}
                 busy={true}
@@ -150,7 +149,7 @@ export function HomeAttentionRail() {
             {(item) => (
               <SessionItem
                 title={item.session.title}
-                subtitle={item.summary ?? relativeTime(item.updated)}
+                subtitle={item.description ?? relativeTime(item.updated)}
                 status={workStatusLabel(item.status)}
                 statusColor={statusColor(item.status)}
                 busy={false}
@@ -170,8 +169,6 @@ export function HomeActivityStrip() {
   const local = useLocal()
   const { theme } = useTheme()
   const shortcut = useCommandShortcut("session.attention.jump")
-
-  void local.session.refreshRouting()
 
   const activity = createMemo(() => {
     const sessions = sync.data.session.filter((session) => !session.parentID && !session.time.archived)
@@ -264,7 +261,7 @@ function SessionItem(props: {
       gap={0}
     >
       <box flexDirection="row" justifyContent="space-between" gap={1}>
-        <text fg={theme.text}>{Locale.truncate(props.title || "Untitled session", 24)}</text>
+        <text fg={theme.text}>{Locale.truncate(props.title || "Untitled session", 22)}</text>
         <box flexDirection="row" gap={1}>
           <Show when={props.busy}>
             <Spinner color={props.statusColor} />
@@ -272,7 +269,7 @@ function SessionItem(props: {
           <StatusPill label={props.status} color={props.statusColor} />
         </box>
       </box>
-      <text fg={theme.textMuted}>{props.subtitle}</text>
+      <text fg={theme.textMuted}>{Locale.truncate(props.subtitle, 34)}</text>
     </box>
   )
 }
