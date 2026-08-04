@@ -1,5 +1,5 @@
 import { Prompt, type PromptRef } from "../component/prompt"
-import { createEffect, createMemo, createSignal, onMount, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, on, onMount, Show } from "solid-js"
 import { Logo } from "../component/logo"
 import { useSync } from "../context/sync"
 import { Toast } from "../ui/toast"
@@ -89,6 +89,26 @@ export function Home() {
       void sync.session.sync(session.id).catch(() => hydratedHomeSessions.delete(session.id))
     }
   })
+
+  createEffect(
+    on(
+      () => {
+        if (!sync.ready) return
+        return sync.data.session
+          .filter((session) => !session.parentID && !session.time.archived)
+          .toSorted((a, b) => a.id.localeCompare(b.id))
+          .map(
+            (session) =>
+              `${session.id}:${session.time.updated}:${sync.data.session_status[session.id]?.type ?? "idle"}:${sync.data.permission[session.id]?.length ?? 0}:${sync.data.question[session.id]?.length ?? 0}`,
+          )
+          .join("|")
+      },
+      (state) => {
+        if (state === undefined) return
+        void local.session.refreshRouting()
+      },
+    ),
+  )
 
   return (
     <HomeSessionDestinationProvider>
