@@ -233,16 +233,6 @@ function toRoutingMessage(message: SessionV1.WithParts): RoutingMessage {
   }
 }
 
-export const defaultLayer = Layer.suspend(() =>
-  layer.pipe(
-    Layer.provide(Session.defaultLayer),
-    Layer.provide(SessionStatus.defaultLayer),
-    Layer.provide(Permission.defaultLayer),
-    Layer.provide(Question.defaultLayer),
-    Layer.provide(Database.defaultLayer),
-  ),
-)
-
 export const node = LayerNode.make({
   service: Service,
   layer: layer,
