@@ -56,6 +56,15 @@ import { useTuiConfig } from "../../config"
 import { usePromptWorkspace } from "./workspace"
 import { usePromptMove } from "./move"
 import { readLocalAttachment } from "./local-attachment"
+import { DialogRouteTarget } from "../dialog-route-target"
+import {
+  routeTargetAction,
+  routeTargetDetail,
+  routeTargetTitle,
+  type DeliverySource,
+  type RouteCandidate,
+  type RouteTarget,
+} from "./routing-presentation"
 
 export type PromptProps = {
   sessionID?: string
@@ -936,6 +945,180 @@ export function Prompt(props: PromptProps) {
     }
   }
 
+  // Pre-send route preview: build the same delivery plan that submit will
+  // execute, so pressing enter confirms a visible decision instead of guessing.
+  type RoutePreview = {
+    text: string
+    currentSessionID?: string
+    decision?: RouteCandidate
+    candidates: RouteCandidate[]
+  }
+
+  type RouteOverride = {
+    text: string
+    currentSessionID?: string
+    target: RouteTarget
+  }
+
+  type RouteDraft = {
+    text: string
+    currentSessionID?: string
+  }
+
+  const [routePreview, setRoutePreview] = createSignal<RoutePreview | undefined>()
+  const [routeOverride, setRouteOverride] = createSignal<RouteOverride | undefined>()
+  const routeCycleShortcut = useCommandShortcut("prompt.route.cycle")
+
+  function expandedPromptText() {
+    return expandTrackedPastedText(
+      store.prompt.input,
+      store.prompt.parts.flatMap((part) => {
+        if (part.type !== "text" || !part.source?.text) return []
+        return [{ start: part.source.text.start, end: part.source.text.end, text: part.text }]
+      }),
+    )
+  }
+
+  const routeDraft = createMemo<RouteDraft | undefined>(() => {
+    const text = expandedPromptText()
+    if (!text || store.mode !== "normal" || text.startsWith("/") || move.pendingNew()) return undefined
+    return { text, currentSessionID: props.sessionID }
+  })
+
+  function sameRouteDraft(value: RoutePreview | RouteOverride, draft: RouteDraft | undefined) {
+    return draft !== undefined && value.text === draft.text && value.currentSessionID === draft.currentSessionID
+  }
+
+  const currentRoutePreview = createMemo(() => {
+    const preview = routePreview()
+    if (!preview || !sameRouteDraft(preview, routeDraft())) return undefined
+    return preview
+  })
+
+  const currentRouteOverride = createMemo(() => {
+    const override = routeOverride()
+    if (!override || !sameRouteDraft(override, routeDraft())) return undefined
+    return override
+  })
+
+  let routeTimer: ReturnType<typeof setTimeout> | undefined
+  let routeSeq = 0
+  createEffect(
+    on(
+      () => [routeDraft()?.text, routeDraft()?.currentSessionID] as const,
+      ([text, currentSessionID]) => {
+        if (routeTimer) clearTimeout(routeTimer)
+        routeSeq++
+        setRoutePreview(undefined)
+        setRouteOverride((override) => {
+          if (override && override.text === text && override.currentSessionID === currentSessionID) return override
+          return undefined
+        })
+        if (!text) {
+          return
+        }
+        const seq = routeSeq
+        routeTimer = setTimeout(() => {
+          sdk.client.session
+            .route({ text, currentSessionID })
+            .then((res) => {
+              if (seq !== routeSeq) return
+              if (!res.data) {
+                setRoutePreview(undefined)
+                return
+              }
+              setRoutePreview({
+                text,
+                currentSessionID,
+                decision: res.data.decision ?? undefined,
+                candidates: [...res.data.candidates],
+              })
+            })
+            .catch(() => {
+              if (seq === routeSeq) setRoutePreview(undefined)
+            })
+        }, 300)
+      },
+    ),
+  )
+  onCleanup(() => {
+    if (routeTimer) clearTimeout(routeTimer)
+  })
+
+  const routeTargets = createMemo<RouteTarget[]>(() => {
+    const candidateTargets = (currentRoutePreview()?.candidates ?? [])
+      .filter((candidate) => candidate.sessionID !== props.sessionID)
+      .map((candidate): RouteTarget => ({ type: "session", ...candidate }))
+    if (!routeDraft()) return []
+    if (!props.sessionID) return [...candidateTargets, { type: "new" }]
+    return [...candidateTargets, { type: "new" }, { type: "stay" }]
+  })
+
+  const routeTarget = createMemo<RouteTarget>(() => {
+    const override = currentRouteOverride()
+    if (override) return override.target
+    const decision = currentRoutePreview()?.decision
+    if (decision && decision.sessionID !== props.sessionID) {
+      return { type: "session", ...decision }
+    }
+    return props.sessionID ? { type: "stay" } : { type: "new" }
+  })
+
+  function chooseRouteTarget() {
+    const draft = routeDraft()
+    const targets = routeTargets()
+    if (!draft || targets.length === 0) return
+    const selected = routeTarget()
+    dialog.replace(() => (
+      <DialogRouteTarget
+        targets={targets}
+        current={selected}
+        onSelect={(target) => {
+          setRouteOverride({
+            text: draft.text,
+            currentSessionID: draft.currentSessionID,
+            target,
+          })
+        }}
+      />
+    ))
+  }
+
+  const deliveryPlan = createMemo(() => {
+    if (!routeDraft()) return undefined
+    if (auto()?.visible) return undefined
+    const target = routeTarget()
+    const source: DeliverySource = currentRouteOverride() ? "manual" : "automatic"
+    if (target.type === "stay" && source !== "manual") return undefined
+    // A lone "new session" on home is the obvious default; only surface it
+    // once there are real alternatives or the user started cycling.
+    if (target.type === "new" && !props.sessionID && source !== "manual" && routeTargets().length <= 1) return undefined
+    return { target, source }
+  })
+
+  useBindings(() => {
+    return {
+      target: inputTarget,
+      enabled:
+        inputTarget() !== undefined &&
+        !props.disabled &&
+        !auto()?.visible &&
+        routeDraft() !== undefined &&
+        routeTargets().length > 1,
+      commands: [
+        {
+          name: "prompt.route.cycle",
+          title: "Choose where the prompt will be sent",
+          category: "Prompt",
+          run() {
+            chooseRouteTarget()
+          },
+        },
+      ],
+      bindings: tuiConfig.keybinds.get("prompt.route.cycle"),
+    }
+  })
+
   let submitting = false
   async function submit() {
     // Prevent overlapping invocations (e.g. a double-pressed Enter, or the
@@ -981,15 +1164,7 @@ export function Prompt(props: PromptProps) {
     }
 
     const variant = local.model.variant.current()
-    const inputText = expandTrackedPastedText(
-      store.prompt.input,
-      input.extmarks.getAllForTypeId(promptPartTypeId).flatMap((extmark) => {
-        const partIndex = store.extmarkToPartIndex.get(extmark.id)
-        const part = partIndex === undefined ? undefined : store.prompt.parts[partIndex]
-        if (part?.type !== "text") return []
-        return [{ start: extmark.start, end: extmark.end, text: part.text }]
-      }),
-    )
+    const inputText = expandedPromptText()
 
     // Filter out text parts (pasted content) since they're now expanded inline
     const nonTextParts = store.prompt.parts.filter((part) => part.type !== "text")
@@ -1006,10 +1181,28 @@ export function Prompt(props: PromptProps) {
         }
       | undefined
     let finishMoveProgress = false
-    const routing =
-      currentMode === "normal" && !inputText.startsWith("/") && !move.pendingNew()
-        ? await routePrompt(inputText)
-        : undefined
+    const routingEligible = currentMode === "normal" && !inputText.startsWith("/") && !move.pendingNew()
+    const routeScope = { text: inputText, currentSessionID: props.sessionID }
+    const override = routingEligible ? routeOverride() : undefined
+    const preview = routingEligible ? routePreview() : undefined
+    let routing: RouteCandidate | undefined
+    if (routingEligible) {
+      if (override && sameRouteDraft(override, routeScope)) {
+        if (override.target.type === "session") {
+          routing = {
+            sessionID: override.target.sessionID,
+            title: override.target.title,
+            reason: "manual",
+            score: override.target.score,
+          }
+        }
+        if (override.target.type === "new") sessionID = undefined
+      } else if (preview && sameRouteDraft(preview, routeScope)) {
+        routing = preview.decision
+      } else {
+        routing = await routePrompt(inputText)
+      }
+    }
     if (routing && routing.sessionID !== sessionID) {
       sessionID = routing.sessionID
       routeRecord = {
@@ -1185,11 +1378,12 @@ export function Prompt(props: PromptProps) {
     // Follow the message: the conversation continues wherever it was routed
     // or created, while the previous session keeps working in the background.
     // Deferred so the send settles before this component unmounts.
-    if (!props.sessionID || routeRecord?.kind === "routed") {
+    if (sessionID !== undefined && sessionID !== props.sessionID) {
+      const target = sessionID
       setTimeout(() => {
         route.navigate({
           type: "session",
-          sessionID,
+          sessionID: target,
         })
       }, 50)
     }
@@ -1491,6 +1685,19 @@ export function Prompt(props: PromptProps) {
               cursorColor={props.disabled ? theme.backgroundElement : theme.text}
               syntaxStyle={syntax()}
             />
+            <Show when={deliveryPlan()}>
+              {(plan) => (
+                <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1}>
+                  <text fg={theme.accent}>→</text>
+                  <text fg={theme.textMuted}>{routeTargetAction(plan().target)}</text>
+                  <text fg={theme.text}>{Locale.truncate(routeTargetTitle(plan().target), 36)}</text>
+                  <text fg={theme.textMuted}>
+                    · {routeTargetDetail(plan().target, plan().source)}
+                    {routeCycleShortcut() ? ` · ${routeCycleShortcut()} choose` : ""}
+                  </text>
+                </box>
+              )}
+            </Show>
             <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1} justifyContent="space-between">
               <box flexDirection="row" gap={1}>
                 <Show when={local.agent.current()} fallback={<box height={1} />}>

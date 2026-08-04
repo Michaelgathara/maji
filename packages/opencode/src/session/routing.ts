@@ -11,7 +11,14 @@ import { Question } from "@/question"
 import { Session } from "./session"
 import { SessionStatus } from "./status"
 import { SessionID } from "./schema"
-import { buildRoutingCard, routePrompt, type RouteCandidate, type RoutingMessage, type RoutingPart } from "./routing-engine"
+import {
+  buildRoutingCard,
+  routePrompt,
+  routingCardNeedsRefresh,
+  type RouteCandidate,
+  type RoutingMessage,
+  type RoutingPart,
+} from "./routing-engine"
 
 export const RouteInput = Schema.Struct({
   text: Schema.String,
@@ -117,7 +124,15 @@ export const layer = Layer.effect(
       }
 
       const stale = input.candidates
-        .filter((session) => known.get(session.id) !== session.time.updated)
+        .filter(
+          (session) =>
+            known.get(session.id) !== session.time.updated ||
+            routingCardNeedsRefresh({
+              card: cards.get(session.id),
+              pendingInput: input.pendingInput.get(session.id) ?? 0,
+              busy: isBusy(input.statuses.get(session.id)),
+            }),
+        )
         .toSorted((a, b) => b.time.updated - a.time.updated)
         .slice(0, REFRESH_LIMIT)
 

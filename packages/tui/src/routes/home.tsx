@@ -1,5 +1,5 @@
 import { Prompt, type PromptRef } from "../component/prompt"
-import { createEffect, createMemo, createSignal, onMount, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, on, onMount, Show } from "solid-js"
 import { Logo } from "../component/logo"
 import { useSync } from "../context/sync"
 import { Toast } from "../ui/toast"
@@ -12,7 +12,7 @@ import { useEditorContext } from "../context/editor"
 import { useTerminalDimensions } from "@opentui/solid"
 import { useTuiConfig } from "../config"
 import { HomeSessionDestinationProvider } from "./home/session-destination"
-import { HomeAttentionRail } from "./home/attention-rail"
+import { HomeActivityStrip, HomeAttentionRail } from "./home/attention-rail"
 import { useTheme } from "../context/theme"
 
 let once = false
@@ -90,6 +90,26 @@ export function Home() {
     }
   })
 
+  createEffect(
+    on(
+      () => {
+        if (!sync.ready) return
+        return sync.data.session
+          .filter((session) => !session.parentID && !session.time.archived)
+          .toSorted((a, b) => a.id.localeCompare(b.id))
+          .map(
+            (session) =>
+              `${session.id}:${session.time.updated}:${sync.data.session_status[session.id]?.type ?? "idle"}:${sync.data.permission[session.id]?.length ?? 0}:${sync.data.question[session.id]?.length ?? 0}`,
+          )
+          .join("|")
+      },
+      (state) => {
+        if (state === undefined) return
+        void local.session.refreshRouting()
+      },
+    ),
+  )
+
   return (
     <HomeSessionDestinationProvider>
       <box flexGrow={1} flexDirection="row" minHeight={0}>
@@ -110,6 +130,9 @@ export function Home() {
               <Prompt ref={bind} right={<pluginRuntime.Slot name="home_prompt_right" />} placeholders={placeholder} />
             </pluginRuntime.Slot>
           </box>
+          <Show when={!showAttentionRail()}>
+            <HomeActivityStrip />
+          </Show>
           <pluginRuntime.Slot name="home_bottom" />
           <box flexGrow={1} minHeight={0} />
           <Toast />

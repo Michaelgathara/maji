@@ -119,7 +119,7 @@ function OtherSessions(props: { sessionID: string }) {
     <Show when={items().length > 0}>
       <box flexShrink={0} gap={1} paddingTop={1}>
         <text fg={theme.text}>
-          <b>Other sessions</b>
+          <b>Other work</b>
         </text>
         <For each={items()}>
           {(item) => (
@@ -138,7 +138,7 @@ function OtherSessions(props: { sessionID: string }) {
                   <Spinner color={theme.success} />
                 </Show>
                 <text fg={item.pending > 0 ? theme.warning : theme.success}>
-                  {item.pending > 0 ? "input" : "working"}
+                  {item.pending > 0 ? "needs you" : "working"}
                 </text>
               </box>
             </box>

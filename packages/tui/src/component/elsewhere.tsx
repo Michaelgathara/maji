@@ -13,8 +13,7 @@ export function createElsewhere(sessionID: () => string | undefined, limit = 5) 
     sync.data.session
       .filter((session) => !session.parentID && !session.time.archived && session.id !== sessionID())
       .map((session) => {
-        const pending =
-          (sync.data.permission[session.id]?.length ?? 0) + (sync.data.question[session.id]?.length ?? 0)
+        const pending = (sync.data.permission[session.id]?.length ?? 0) + (sync.data.question[session.id]?.length ?? 0)
         const status = sync.data.session_status[session.id]
         return {
           session,
@@ -24,8 +23,7 @@ export function createElsewhere(sessionID: () => string | undefined, limit = 5) 
       })
       .filter((item) => item.pending > 0 || item.busy)
       .toSorted(
-        (a, b) =>
-          (b.pending > 0 ? 1 : 0) - (a.pending > 0 ? 1 : 0) || b.session.time.updated - a.session.time.updated,
+        (a, b) => (b.pending > 0 ? 1 : 0) - (a.pending > 0 ? 1 : 0) || b.session.time.updated - a.session.time.updated,
       )
       .slice(0, limit),
   )
@@ -52,7 +50,7 @@ export function ElsewhereStrip(props: { sessionID: string }) {
               </Show>
               <text fg={item.pending > 0 ? theme.warning : theme.textMuted}>
                 {Locale.truncate(item.session.title || "Untitled session", 20)}
-                {item.pending > 0 ? " input" : ""}
+                {item.pending > 0 ? " · needs you" : ""}
               </text>
             </box>
           )}

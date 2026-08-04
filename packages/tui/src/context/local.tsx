@@ -534,21 +534,27 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       })
 
       let refreshingCards = false
+      let routingRefreshPending = false
       async function refreshRouting() {
-        if (refreshingCards) return
+        if (refreshingCards) {
+          routingRefreshPending = true
+          return
+        }
         refreshingCards = true
         try {
-          const res = await sdk.client.session.routeCards()
-          if (res.data) {
-            setSessionStore("cards", Object.fromEntries(res.data.map((entry) => [entry.sessionID, entry.card])))
-          }
+          do {
+            routingRefreshPending = false
+            const res = await sdk.client.session.routeCards()
+            if (res.data) {
+              setSessionStore("cards", Object.fromEntries(res.data.map((entry) => [entry.sessionID, entry.card])))
+            }
+          } while (routingRefreshPending)
         } catch {
           // routing cards are advisory; ignore fetch failures
         } finally {
           refreshingCards = false
         }
       }
-      void refreshRouting()
 
       return {
         get ready() {

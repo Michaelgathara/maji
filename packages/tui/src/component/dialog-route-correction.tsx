@@ -1,4 +1,4 @@
-import { createMemo } from "solid-js"
+import { createMemo, onMount } from "solid-js"
 import { DialogSelect } from "../ui/dialog-select"
 import { useDialog } from "../ui/dialog"
 import { useLocal } from "../context/local"
@@ -17,7 +17,9 @@ export function DialogRouteCorrection() {
   const route = useRoute()
   const toast = useToast()
 
-  void local.session.refreshRouting()
+  onMount(() => {
+    void local.session.refreshRouting()
+  })
 
   const record = createMemo(() => local.session.lastRoute())
   const sessions = createMemo(() => new Map(sync.data.session.map((session) => [session.id, session])))
@@ -34,15 +36,12 @@ export function DialogRouteCorrection() {
         return {
           title: session.title,
           value: session.id,
-          category: session.id === record()?.sessionID ? "Current route" : undefined,
+          category: session.id === record()?.sessionID ? "Original task" : undefined,
           disabled: session.id === currentTarget(),
           description: memory?.summary ?? session.directory,
-          details: [
-            memory?.taskType,
-            memory?.canonicalTopic,
-            memory?.currentStatus,
-            memory?.outcome,
-          ].filter((item): item is string => !!item),
+          details: [memory?.taskType, memory?.canonicalTopic, memory?.currentStatus, memory?.outcome].filter(
+            (item): item is string => !!item,
+          ),
         }
       }),
   )
@@ -53,7 +52,7 @@ export function DialogRouteCorrection() {
     const model = local.model.current()
     const agent = local.agent.current()
     if (!model || !agent) {
-      toast.show({ message: "Choose a model and agent before rerouting.", variant: "warning" })
+      toast.show({ message: "Choose a model and agent before sending the prompt again.", variant: "warning" })
       return
     }
     try {
@@ -83,7 +82,7 @@ export function DialogRouteCorrection() {
         kind: "corrected",
       })
       toast.show({
-        message: `Rerouted to ${Locale.truncate(session?.title ?? sessionID, 36)}`,
+        message: `Sent a copy to ${Locale.truncate(session?.title ?? sessionID, 36)}`,
         variant: "success",
         duration: 2500,
       })
@@ -91,7 +90,7 @@ export function DialogRouteCorrection() {
       route.navigate({ type: "session", sessionID })
     } catch (error) {
       toast.show({
-        title: "Failed to reroute prompt",
+        title: "Failed to send prompt copy",
         message: errorMessage(error),
         variant: "error",
       })
@@ -101,18 +100,19 @@ export function DialogRouteCorrection() {
   const latest = record()
   return (
     <DialogSelect
-      title="Reroute last prompt"
-      placeholder="Choose a better session"
+      title="Send last prompt again"
+      placeholder="Choose another task"
       options={options()}
       current={latest?.sessionID}
-      emptyView={<text>No routeable sessions yet.</text>}
+      emptyView={<text>No other tasks yet.</text>}
       footer={
         latest ? (
           <box flexDirection="column">
+            <text>This sends a copy. The original task is not cancelled.</text>
             <text>{Locale.truncate(latest.prompt, 90)}</text>
             <text>
-              {latest.kind === "created" ? "Created" : "Routed"} to {Locale.truncate(latest.title, 36)} via{" "}
-              {latest.reason}
+              {latest.kind === "created" ? "Originally created" : "Originally routed"} to{" "}
+              {Locale.truncate(latest.title, 36)} via {latest.reason}
             </text>
           </box>
         ) : (

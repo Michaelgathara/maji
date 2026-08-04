@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { buildRoutingCard, routePrompt, type RouteCandidate } from "@/session/routing-engine"
+import { buildRoutingCard, routePrompt, routingCardNeedsRefresh, type RouteCandidate } from "@/session/routing-engine"
 import type { SessionRouting } from "@opencode-ai/schema/session-routing"
 
 const now = 1_800_000
@@ -252,5 +252,16 @@ describe("routing-engine", () => {
     })
 
     expect(outcome.decision?.sessionID).toBe("a")
+  })
+
+  test("refreshes cards when live work state moves beyond stored state", () => {
+    const active = candidate({ id: "a", title: "Active", card: { statusHint: "active" } }).card
+    const done = candidate({ id: "b", title: "Done", card: { statusHint: "done" } }).card
+
+    expect(routingCardNeedsRefresh({ card: active, pendingInput: 0, busy: true })).toBe(false)
+    expect(routingCardNeedsRefresh({ card: active, pendingInput: 0, busy: false })).toBe(true)
+    expect(routingCardNeedsRefresh({ card: done, pendingInput: 1, busy: false })).toBe(true)
+    expect(routingCardNeedsRefresh({ card: done, pendingInput: 0, busy: true })).toBe(true)
+    expect(routingCardNeedsRefresh({ card: done, pendingInput: 0, busy: false })).toBe(false)
   })
 })

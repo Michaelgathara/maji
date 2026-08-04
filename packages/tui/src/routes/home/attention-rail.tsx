@@ -4,53 +4,83 @@ import { useSync } from "../../context/sync"
 import { useTheme } from "../../context/theme"
 import { Locale } from "../../util/locale"
 import { Spinner } from "../../component/spinner"
+import { useLocal } from "../../context/local"
+import { useCommandShortcut } from "../../keymap"
+import { compareWorkActivity, workDescription, workStatus, workStatusLabel, type WorkStatus } from "./activity"
 
 export function HomeAttentionRail() {
   const route = useRoute()
   const sync = useSync()
+  const local = useLocal()
   const { theme } = useTheme()
 
   const sessions = createMemo(() => new Map(sync.data.session.map((session) => [session.id, session])))
-  const needsInput = createMemo(() =>
-    Object.entries(sync.data.permission)
-      .flatMap(([sessionID, permissions]) =>
-        permissions.map(() => ({
-          sessionID,
-          kind: "Permission",
-          tone: theme.warning,
-        })),
-      )
-      .concat(
-        Object.entries(sync.data.question).flatMap(([sessionID, questions]) =>
-          questions.map(() => ({
+  const needsInput = createMemo(() => {
+    const sessionIDs = new Set([...Object.keys(sync.data.permission), ...Object.keys(sync.data.question)])
+    return [...sessionIDs]
+      .flatMap((sessionID) => {
+        const session = sessions().get(sessionID)
+        if (!session) return []
+        const permissions = sync.data.permission[sessionID]?.length ?? 0
+        const questions = sync.data.question[sessionID]?.length ?? 0
+        const count = permissions + questions
+        if (count === 0) return []
+        return [
+          {
             sessionID,
-            kind: "Question",
-            tone: theme.accent,
-          })),
-        ),
-      )
-      .filter((item) => sessions().has(item.sessionID))
-      .slice(0, 6),
-  )
-  const previousSessions = createMemo(() =>
+            title: session.title,
+            label:
+              questions > 0
+                ? questions === 1
+                  ? "Answer question"
+                  : `Answer ${questions} questions`
+                : permissions === 1
+                  ? "Review permission"
+                  : `Review ${permissions} permissions`,
+            tone: questions > 0 ? theme.accent : theme.warning,
+            updated: session.time.updated,
+          },
+        ]
+      })
+      .toSorted((a, b) => b.updated - a.updated)
+      .slice(0, 6)
+  })
+  const work = createMemo(() =>
     sync.data.session
       .filter((session) => !session.parentID && !session.time.archived)
-      .toSorted((a, b) => {
-        const aInput = hasInput(a.id) ? 1 : 0
-        const bInput = hasInput(b.id) ? 1 : 0
-        const aWorking = isWorking(a.id) ? 1 : 0
-        const bWorking = isWorking(b.id) ? 1 : 0
-        return bInput - aInput || bWorking - aWorking || b.time.updated - a.time.updated
+      .map((session) => {
+        const memory = local.session.routing(session.id)
+        const status = workStatus({
+          pending: inputCount(session.id),
+          busy: isWorking(session.id),
+          statusHint: memory?.statusHint,
+        })
+        return {
+          session,
+          status,
+          description: workDescription({ ...memory, status }),
+          updated: session.time.updated,
+        }
       })
-      .slice(0, 9),
+      .toSorted(compareWorkActivity),
+  )
+  const working = createMemo(() =>
+    work()
+      .filter((item) => item.status === "working")
+      .slice(0, 4),
+  )
+  const recent = createMemo(() =>
+    work()
+      .filter((item) => item.status !== "needs-you" && item.status !== "working")
+      .slice(0, 7),
   )
 
   function open(sessionID: string) {
     route.navigate({ type: "session", sessionID })
   }
 
-  function hasInput(sessionID: string) {
-    return (sync.data.permission[sessionID]?.length ?? 0) + (sync.data.question[sessionID]?.length ?? 0) > 0
+  function inputCount(sessionID: string) {
+    return (sync.data.permission[sessionID]?.length ?? 0) + (sync.data.question[sessionID]?.length ?? 0)
   }
 
   function isWorking(sessionID: string) {
@@ -58,14 +88,11 @@ export function HomeAttentionRail() {
     return !!status && status.type !== "idle"
   }
 
-  function sessionStatus(sessionID: string): {
-    label: string
-    color: ReturnType<typeof useTheme>["theme"]["text"]
-    busy: boolean
-  } {
-    if (hasInput(sessionID)) return { label: "input", color: theme.warning, busy: false }
-    if (isWorking(sessionID)) return { label: "working", color: theme.success, busy: true }
-    return { label: "idle", color: theme.textMuted, busy: false }
+  function statusColor(status: WorkStatus) {
+    if (status === "needs-you") return theme.warning
+    if (status === "working") return theme.success
+    if (status === "done") return theme.accent
+    return theme.textMuted
   }
 
   return (
@@ -81,17 +108,32 @@ export function HomeAttentionRail() {
       gap={1}
     >
       <text fg={theme.text}>
-        <b>Attention</b>
+        <b>Needs you</b>
       </text>
-      <Show when={needsInput().length > 0} fallback={<text fg={theme.textMuted}>Nothing needs input.</text>}>
+      <Show when={needsInput().length > 0} fallback={<text fg={theme.textMuted}>Nothing needs you.</text>}>
         <box gap={1}>
           <For each={needsInput()}>
             {(item) => (
-              <RailItem
-                title={sessions().get(item.sessionID)?.title ?? item.sessionID}
-                label={item.kind}
-                color={item.tone}
-                onClick={() => open(item.sessionID)}
+              <RailItem title={item.title} label={item.label} color={item.tone} onClick={() => open(item.sessionID)} />
+            )}
+          </For>
+        </box>
+      </Show>
+
+      <Show when={working().length > 0}>
+        <box paddingTop={1} gap={1}>
+          <text fg={theme.text}>
+            <b>Working</b>
+          </text>
+          <For each={working()}>
+            {(item) => (
+              <SessionItem
+                title={item.session.title}
+                subtitle={item.description ?? relativeTime(item.updated)}
+                status={workStatusLabel(item.status)}
+                statusColor={statusColor(item.status)}
+                busy={true}
+                onClick={() => open(item.session.id)}
               />
             )}
           </For>
@@ -100,27 +142,80 @@ export function HomeAttentionRail() {
 
       <box paddingTop={1} gap={1} flexGrow={1} minHeight={0}>
         <text fg={theme.text}>
-          <b>Sessions</b>
+          <b>Recent work</b>
         </text>
-        <Show when={previousSessions().length > 0} fallback={<text fg={theme.textMuted}>No sessions yet.</text>}>
-          <For each={previousSessions()}>
-            {(session) => {
-              const status = createMemo(() => sessionStatus(session.id))
-              return (
-                <SessionItem
-                  title={session.title}
-                  subtitle={relativeTime(session.time.updated)}
-                  status={status().label}
-                  statusColor={status().color}
-                  busy={status().busy}
-                  onClick={() => open(session.id)}
-                />
-              )
-            }}
+        <Show when={recent().length > 0} fallback={<text fg={theme.textMuted}>No tasks yet.</text>}>
+          <For each={recent()}>
+            {(item) => (
+              <SessionItem
+                title={item.session.title}
+                subtitle={item.description ?? relativeTime(item.updated)}
+                status={workStatusLabel(item.status)}
+                statusColor={statusColor(item.status)}
+                busy={false}
+                onClick={() => open(item.session.id)}
+              />
+            )}
           </For>
         </Show>
       </box>
     </box>
+  )
+}
+
+export function HomeActivityStrip() {
+  const route = useRoute()
+  const sync = useSync()
+  const local = useLocal()
+  const { theme } = useTheme()
+  const shortcut = useCommandShortcut("session.attention.jump")
+
+  const activity = createMemo(() => {
+    const sessions = sync.data.session.filter((session) => !session.parentID && !session.time.archived)
+    const needsYou = sessions.filter(
+      (session) => (sync.data.permission[session.id]?.length ?? 0) + (sync.data.question[session.id]?.length ?? 0) > 0,
+    )
+    const working = sessions.filter((session) => {
+      if (needsYou.some((item) => item.id === session.id)) return false
+      const status = sync.data.session_status[session.id]
+      return !!status && status.type !== "idle"
+    })
+    const done = sessions.filter((session) => {
+      if (Date.now() - session.time.updated >= 24 * 60 * 60_000) return false
+      if (needsYou.some((item) => item.id === session.id)) return false
+      if (working.some((item) => item.id === session.id)) return false
+      return local.session.routing(session.id)?.statusHint === "done"
+    })
+    return { needsYou, working, done }
+  })
+  const target = createMemo(() => activity().needsYou[0] ?? activity().working[0] ?? activity().done[0])
+
+  return (
+    <Show when={target()}>
+      <box
+        flexDirection="row"
+        gap={1}
+        paddingTop={1}
+        onMouseUp={() => {
+          const session = target()
+          if (session) route.navigate({ type: "session", sessionID: session.id })
+        }}
+      >
+        <text fg={activity().needsYou.length > 0 ? theme.warning : theme.textMuted}>
+          {activity().needsYou.length} need you
+        </text>
+        <text fg={theme.textMuted}>·</text>
+        <text fg={activity().working.length > 0 ? theme.success : theme.textMuted}>
+          {activity().working.length} working
+        </text>
+        <Show when={activity().done.length > 0}>
+          <text fg={theme.textMuted}>· {activity().done.length} done today</text>
+        </Show>
+        <Show when={shortcut() && (activity().needsYou.length > 0 || activity().working.length > 0)}>
+          <text fg={theme.textMuted}>· {shortcut()} open</text>
+        </Show>
+      </box>
+    </Show>
   )
 }
 
@@ -166,7 +261,7 @@ function SessionItem(props: {
       gap={0}
     >
       <box flexDirection="row" justifyContent="space-between" gap={1}>
-        <text fg={theme.text}>{Locale.truncate(props.title || "Untitled session", 24)}</text>
+        <text fg={theme.text}>{Locale.truncate(props.title || "Untitled session", 22)}</text>
         <box flexDirection="row" gap={1}>
           <Show when={props.busy}>
             <Spinner color={props.statusColor} />
@@ -174,7 +269,7 @@ function SessionItem(props: {
           <StatusPill label={props.status} color={props.statusColor} />
         </box>
       </box>
-      <text fg={theme.textMuted}>{props.subtitle}</text>
+      <text fg={theme.textMuted}>{Locale.truncate(props.subtitle, 34)}</text>
     </box>
   )
 }
