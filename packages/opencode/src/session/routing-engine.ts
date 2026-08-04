@@ -43,6 +43,13 @@ const SCORE_THRESHOLD = 3.8
 const STAY_MARGIN = 2
 const AMBIGUITY_MARGIN = 1.15
 
+export function routingCardNeedsRefresh(input: { card?: SessionRouting.Card; pendingInput: number; busy: boolean }) {
+  if (!input.card) return true
+  if (input.pendingInput > 0) return input.card.statusHint !== "needs-input"
+  if (input.busy) return input.card.statusHint !== "active"
+  return input.card.statusHint === "needs-input" || input.card.statusHint === "active"
+}
+
 export function routePrompt(input: {
   prompt: string
   candidates: readonly RouteCandidate[]
