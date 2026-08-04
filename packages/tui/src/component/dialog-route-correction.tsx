@@ -1,4 +1,4 @@
-import { createMemo } from "solid-js"
+import { createMemo, onMount } from "solid-js"
 import { DialogSelect } from "../ui/dialog-select"
 import { useDialog } from "../ui/dialog"
 import { useLocal } from "../context/local"
@@ -17,7 +17,9 @@ export function DialogRouteCorrection() {
   const route = useRoute()
   const toast = useToast()
 
-  void local.session.refreshRouting()
+  onMount(() => {
+    void local.session.refreshRouting()
+  })
 
   const record = createMemo(() => local.session.lastRoute())
   const sessions = createMemo(() => new Map(sync.data.session.map((session) => [session.id, session])))
