@@ -106,7 +106,7 @@ export async function warpWorkspaceSession(input: {
     })
   } catch (err) {
     input.toast.show({
-      title: "Failed to warp session",
+      title: "Failed to move task",
       message: errorMessage(err),
       variant: "error",
     })
@@ -116,14 +116,14 @@ export async function warpWorkspaceSession(input: {
     if (result?.error && "name" in result.error && result.error.name === "VcsApplyError") {
       await DialogAlert.show(
         input.dialog,
-        "Unable to Warp Session",
-        "Unable to apply file changes to this workspace. It has existing changes that conflict or is based off a different branch. Session has not been warped.",
+        "Unable to Move Task",
+        "Maji could not apply the task's file changes because this workspace conflicts or is based on a different branch. The task was not moved.",
       )
       return false
     }
 
     input.toast.show({
-      title: "Failed to warp session",
+      title: "Failed to move task",
       message: errorMessage(result?.error ?? "no response"),
       variant: "error",
     })

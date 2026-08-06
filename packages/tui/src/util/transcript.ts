@@ -30,7 +30,7 @@ export function formatTranscript(
 ): string {
   const providers = Model.index(options.providers)
   let transcript = `# ${session.title}\n\n`
-  transcript += `**Session ID:** ${session.id}\n`
+  transcript += `**Task ID:** ${session.id}\n`
   transcript += `**Created:** ${new Date(session.time.created).toLocaleString()}\n`
   transcript += `**Updated:** ${new Date(session.time.updated).toLocaleString()}\n\n`
   transcript += `---\n\n`

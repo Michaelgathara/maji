@@ -6,29 +6,31 @@ import { useBindings } from "../../keymap"
 
 const id = "internal:home-tips"
 
-function View(props: { api: TuiPluginApi; hidden: boolean; show: boolean; connected: boolean }) {
+function View(props: { api: TuiPluginApi; hidden: boolean; connected: boolean }) {
   useBindings(() => ({
-    commands: [
-      {
-        name: "tips.toggle",
-        title: props.hidden ? "Show tips" : "Hide tips",
-        category: "System",
-        namespace: "palette",
-        run() {
-          props.api.kv.set("tips_hidden", !props.api.kv.get("tips_hidden", false))
-          props.api.ui.dialog.clear()
-        },
-      },
-    ],
+    commands: props.connected
+      ? [
+          {
+            name: "tips.toggle",
+            title: props.hidden ? "Show tips" : "Hide tips",
+            category: "System",
+            namespace: "palette",
+            run() {
+              props.api.kv.set("tips_hidden", !props.api.kv.get("tips_hidden", true))
+              props.api.ui.dialog.clear()
+            },
+          },
+        ]
+      : [],
     bindings: props.api.tuiConfig.keybinds.get("tips.toggle"),
   }))
 
   return (
-    <box width="100%" maxWidth={75} alignItems="center" paddingTop={3} flexShrink={1}>
-      <Show when={props.show}>
+    <Show when={!props.connected || !props.hidden}>
+      <box width="100%" maxWidth={75} alignItems="center" paddingTop={3} flexShrink={1}>
         <Tips api={props.api} connected={props.connected} />
-      </Show>
-    </box>
+      </box>
+    </Show>
   )
 }
 
@@ -37,15 +39,13 @@ const tui: TuiPlugin = async (api) => {
     order: 100,
     slots: {
       home_bottom() {
-        const hidden = createMemo(() => api.kv.get("tips_hidden", false))
-        const first = createMemo(() => api.state.session.count() === 0)
+        const hidden = createMemo(() => api.kv.get("tips_hidden", true))
         const connected = createMemo(() =>
           api.state.provider.some(
             (item) => item.id !== "opencode" || Object.values(item.models).some((model) => model.cost?.input !== 0),
           ),
         )
-        const show = createMemo(() => (!first() || !connected()) && !hidden())
-        return <View api={api} hidden={hidden()} show={show()} connected={connected()} />
+        return <View api={api} hidden={hidden()} connected={connected()} />
       },
     },
   })

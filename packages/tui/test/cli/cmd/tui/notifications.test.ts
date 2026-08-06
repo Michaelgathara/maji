@@ -158,7 +158,7 @@ describe("internal notifications TUI plugin", () => {
     expect(harness.notifications).toEqual([
       {
         title: "Demo session",
-        message: "Session done",
+        message: "Task done",
         notification: { when: "blurred" },
         sound: { name: "done", when: "always" },
       },
@@ -189,7 +189,7 @@ describe("internal notifications TUI plugin", () => {
       },
       {
         title: "Subagent session",
-        message: "Session done",
+        message: "Task done",
         notification: false,
         sound: { name: "subagent_done", when: "always" },
       },
@@ -218,7 +218,7 @@ describe("internal notifications TUI plugin", () => {
     expect(harness.notifications).toEqual([
       {
         title: "Demo session",
-        message: "Session error",
+        message: "Task error",
         notification: { when: "blurred" },
         sound: { name: "error", when: "always" },
       },
@@ -252,7 +252,7 @@ describe("internal notifications TUI plugin", () => {
     expect(harness.notifications).toEqual([
       {
         title: "Abort session",
-        message: "Session aborted",
+        message: "Task stopped",
         notification: { when: "blurred" },
         sound: { name: "error", when: "always" },
       },

@@ -39,7 +39,8 @@ export function Home() {
     if (configured === "auto") return Math.max(75, Math.floor(dimensions().width * 0.7))
     return configured ?? 75
   })
-  const showAttentionRail = createMemo(() => dimensions().width >= 120)
+  const hasTasks = createMemo(() => sync.data.session.some((session) => !session.parentID && !session.time.archived))
+  const showAttentionRail = createMemo(() => dimensions().width >= 120 && hasTasks())
   let sent = false
 
   onMount(() => {
@@ -116,13 +117,14 @@ export function Home() {
         <box flexGrow={1} alignItems="center" paddingLeft={2} paddingRight={2} minWidth={0}>
           <box flexGrow={1} minHeight={0} />
           <box height={4} minHeight={0} flexShrink={1} />
-          <box flexShrink={0}>
+          <box flexShrink={0} alignItems="center" gap={1}>
             <pluginRuntime.Slot name="home_logo" mode="replace">
               <box flexDirection="column" alignItems="center">
                 <Logo />
                 <text fg={theme.text}>Maji</text>
               </box>
             </pluginRuntime.Slot>
+            <text fg={theme.textMuted}>Describe the outcome. Maji finds the right task or starts one.</text>
           </box>
           <box height={1} minHeight={0} flexShrink={1} />
           <box width="100%" maxWidth={promptMaxWidth()} zIndex={1000} paddingTop={1} flexShrink={0}>

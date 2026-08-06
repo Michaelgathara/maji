@@ -142,7 +142,7 @@ export function HomeAttentionRail() {
 
       <box paddingTop={1} gap={1} flexGrow={1} minHeight={0}>
         <text fg={theme.text}>
-          <b>Recent work</b>
+          <b>Recent tasks</b>
         </text>
         <Show when={recent().length > 0} fallback={<text fg={theme.textMuted}>No tasks yet.</text>}>
           <For each={recent()}>
@@ -189,6 +189,13 @@ export function HomeActivityStrip() {
     return { needsYou, working, done }
   })
   const target = createMemo(() => activity().needsYou[0] ?? activity().working[0] ?? activity().done[0])
+  const summary = createMemo(() =>
+    [
+      { count: activity().needsYou.length, label: `${activity().needsYou.length} needs you`, color: theme.warning },
+      { count: activity().working.length, label: `${activity().working.length} working`, color: theme.success },
+      { count: activity().done.length, label: `${activity().done.length} done today`, color: theme.textMuted },
+    ].filter((item) => item.count > 0),
+  )
 
   return (
     <Show when={target()}>
@@ -201,16 +208,16 @@ export function HomeActivityStrip() {
           if (session) route.navigate({ type: "session", sessionID: session.id })
         }}
       >
-        <text fg={activity().needsYou.length > 0 ? theme.warning : theme.textMuted}>
-          {activity().needsYou.length} need you
-        </text>
-        <text fg={theme.textMuted}>·</text>
-        <text fg={activity().working.length > 0 ? theme.success : theme.textMuted}>
-          {activity().working.length} working
-        </text>
-        <Show when={activity().done.length > 0}>
-          <text fg={theme.textMuted}>· {activity().done.length} done today</text>
-        </Show>
+        <For each={summary()}>
+          {(item, index) => (
+            <>
+              <Show when={index() > 0}>
+                <text fg={theme.textMuted}>·</text>
+              </Show>
+              <text fg={item.color}>{item.label}</text>
+            </>
+          )}
+        </For>
         <Show when={shortcut() && (activity().needsYou.length > 0 || activity().working.length > 0)}>
           <text fg={theme.textMuted}>· {shortcut()} open</text>
         </Show>
@@ -234,7 +241,7 @@ function RailItem(props: {
       onMouseUp={props.onClick}
       flexDirection="column"
     >
-      <text fg={theme.text}>{Locale.truncate(props.title || "Untitled session", 30)}</text>
+      <text fg={theme.text}>{Locale.truncate(props.title || "Untitled task", 30)}</text>
       <text fg={props.color ?? theme.textMuted}>{props.label}</text>
     </box>
   )
@@ -261,7 +268,7 @@ function SessionItem(props: {
       gap={0}
     >
       <box flexDirection="row" justifyContent="space-between" gap={1}>
-        <text fg={theme.text}>{Locale.truncate(props.title || "Untitled session", 22)}</text>
+        <text fg={theme.text}>{Locale.truncate(props.title || "Untitled task", 22)}</text>
         <box flexDirection="row" gap={1}>
           <Show when={props.busy}>
             <Spinner color={props.statusColor} />

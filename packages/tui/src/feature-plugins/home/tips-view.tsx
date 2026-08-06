@@ -174,21 +174,21 @@ const TIPS: Tip[] = [
   "Run {highlight}/init{/highlight} to auto-generate project rules based on your codebase",
   (shortcuts) => `Use ${commandText("/models", shortcuts.modelList())} to switch between available AI models`,
   (shortcuts) => `Use ${commandText("/themes", shortcuts.themeList())} to switch between ${themeCount} built-in themes`,
-  (shortcuts) => `Use ${commandText("/new", shortcuts.sessionNew())} to start a fresh conversation session`,
-  (shortcuts) => `Use ${commandText("/sessions", shortcuts.sessionList())} to list, pin, and continue sessions`,
-  (shortcuts) => press(shortcuts.sessionPinToggle(), "in the session list to pin one at the top"),
+  (shortcuts) => `Use ${commandText("/new", shortcuts.sessionNew())} to start a fresh task`,
+  (shortcuts) => `Use ${commandText("/tasks", shortcuts.sessionList())} to list, pin, and continue tasks`,
+  (shortcuts) => press(shortcuts.sessionPinToggle(), "in the task list to pin one at the top"),
   (shortcuts) =>
     shortcuts.sessionQuickSwitch1() && shortcuts.sessionQuickSwitch9()
-      ? `Use ${shortcutText(shortcuts.sessionQuickSwitch1())} through ${shortcutText(shortcuts.sessionQuickSwitch9())} to switch pinned sessions`
+      ? `Use ${shortcutText(shortcuts.sessionQuickSwitch1())} through ${shortcutText(shortcuts.sessionQuickSwitch9())} to switch pinned tasks`
       : undefined,
-  "Run {highlight}/compact{/highlight} to summarize long sessions near context limits",
+  "Run {highlight}/compact{/highlight} to summarize long tasks near context limits",
   (shortcuts) => `Use ${commandText("/export", shortcuts.sessionExport())} to save the conversation as Markdown`,
   (shortcuts) => press(shortcuts.messagesCopy(), "to copy the assistant's last message to clipboard"),
   (shortcuts) => press(shortcuts.commandList(), "to see all available actions and commands"),
   "Run {highlight}/connect{/highlight} to add API keys for 75+ supported LLM providers",
   (shortcuts) => `The leader key is ${shortcutText(shortcuts.leader())}; combine with other keys for quick actions`,
   (shortcuts) => press(shortcuts.modelCycleRecent(), "to quickly switch between recently used models"),
-  (shortcuts) => press(shortcuts.sessionSidebarToggle(), "in a session to show or hide the sidebar panel"),
+  (shortcuts) => press(shortcuts.sessionSidebarToggle(), "in a task to show or hide the sidebar panel"),
   (shortcuts) =>
     shortcuts.messagesPageUp() && shortcuts.messagesPageDown()
       ? `Use ${shortcutText(shortcuts.messagesPageUp())}/${shortcutText(shortcuts.messagesPageDown())} to navigate through conversation history`
@@ -208,7 +208,7 @@ const TIPS: Tip[] = [
       shortcuts.childNext(),
     ].filter(Boolean)
     if (!items.length) return undefined
-    return `Use ${items.map(shortcutText).join(" / ")} for parent/child sessions`
+    return `Use ${items.map(shortcutText).join(" / ")} for parent/child tasks`
   },
   "Create {highlight}maji.json{/highlight} for server settings, and {highlight}tui.json{/highlight} for TUI",
   "Place TUI settings in {highlight}~/.config/maji/tui.json{/highlight} for global config",
@@ -232,10 +232,10 @@ const TIPS: Tip[] = [
   "Create {highlight}.ts{/highlight} files in {highlight}.maji/tools/{/highlight} to define new LLM tools",
   "Tool definitions can invoke scripts written in Python, Go, etc",
   "Add {highlight}.ts{/highlight} files to {highlight}.maji/plugins/{/highlight} for event hooks",
-  "Use plugins to send OS notifications when sessions complete",
+  "Use plugins to send OS notifications when tasks complete",
   "Create a plugin to prevent Maji from reading sensitive files",
   "Use {highlight}maji run{/highlight} for non-interactive scripting",
-  "Use {highlight}maji --continue{/highlight} to resume the last session",
+  "Use {highlight}maji --continue{/highlight} to resume the last task",
   "Use {highlight}maji run -f file.ts{/highlight} to attach files via CLI",
   "Use {highlight}--format json{/highlight} for machine-readable output in scripts",
   "Run {highlight}maji serve{/highlight} for headless API access to Maji",
@@ -259,9 +259,9 @@ const TIPS: Tip[] = [
   'Set {highlight}"tools": {"bash": false}{/highlight} to disable specific tools',
   'Set {highlight}"mcp_*": false{/highlight} to disable all tools from an MCP server',
   "Override global tool settings per agent configuration",
-  'Set {highlight}"share": "auto"{/highlight} to automatically share all sessions',
-  'Set {highlight}"share": "disabled"{/highlight} to prevent any session sharing',
-  "Run {highlight}/unshare{/highlight} to remove a session from public access",
+  'Set {highlight}"share": "auto"{/highlight} to automatically share all tasks',
+  'Set {highlight}"share": "disabled"{/highlight} to prevent task sharing',
+  "Run {highlight}/unshare{/highlight} to remove a task from public access",
   "Permission {highlight}doom_loop{/highlight} prevents infinite tool call loops",
   "Permission {highlight}external_directory{/highlight} protects files outside project",
   "Run {highlight}maji debug config{/highlight} to troubleshoot configuration",
@@ -279,7 +279,7 @@ const TIPS: Tip[] = [
   "Commit your project's {highlight}AGENTS.md{/highlight} file to Git for team sharing",
   "Use {highlight}/review{/highlight} to review uncommitted changes, branches, or PRs",
   (shortcuts) => `Use ${commandText("/help", shortcuts.helpShow())} to show the help dialog`,
-  "Use {highlight}/rename{/highlight} to rename the current session",
+  "Use {highlight}/rename{/highlight} to rename the current task",
 ]
 
 const INPUT_UNDO_TIP: Tip = (shortcuts) => press(shortcuts.inputUndo(), "to undo changes in your prompt")

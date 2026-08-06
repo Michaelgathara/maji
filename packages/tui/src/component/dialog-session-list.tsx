@@ -271,7 +271,7 @@ export function DialogSessionList() {
 
   return (
     <DialogSelect
-      title="Sessions"
+      title="Tasks"
       options={options()}
       skipFilter={true}
       preserveSelection={true}
@@ -313,7 +313,7 @@ export function DialogSessionList() {
                   } else {
                     toast.show({
                       variant: "error",
-                      title: "Failed to delete session",
+                      title: "Failed to delete task",
                       message: errorMessage(result.error),
                     })
                   }
@@ -326,7 +326,7 @@ export function DialogSessionList() {
                 } else {
                   toast.show({
                     variant: "error",
-                    title: "Failed to delete session",
+                    title: "Failed to delete task",
                     message: errorMessage(err),
                   })
                 }

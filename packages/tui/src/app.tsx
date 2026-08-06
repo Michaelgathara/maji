@@ -514,7 +514,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
           if (result.data?.id) {
             route.navigate({ type: "session", sessionID: result.data.id })
           } else {
-            toast.show({ message: "Failed to fork session", variant: "error" })
+            toast.show({ message: "Failed to duplicate task", variant: "error" })
           }
         })
       } else {
@@ -534,7 +534,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       if (result.data?.id) {
         route.navigate({ type: "session", sessionID: result.data.id })
       } else {
-        toast.show({ message: "Failed to fork session", variant: "error" })
+        toast.show({ message: "Failed to duplicate task", variant: "error" })
       }
     })
   })
@@ -571,20 +571,20 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       },
       {
         name: "session.list",
-        title: "Switch session",
-        category: "Session",
+        title: "Switch task",
+        category: "Task",
         suggested: sync.data.session.length > 0,
-        slashName: "sessions",
-        slashAliases: ["resume", "continue"],
+        slashName: "tasks",
+        slashAliases: ["sessions", "resume", "continue"],
         run: () => {
           dialog.replace(() => <DialogSessionList />)
         },
       },
       {
         name: "session.new",
-        title: "New session",
+        title: "New task",
         suggested: route.data.type === "session",
-        category: "Session",
+        category: "Task",
         slashName: "new",
         slashAliases: ["clear"],
         run: () => {
@@ -596,30 +596,31 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       },
       {
         name: "routing.explain",
-        title: "Explain last route",
-        category: "Routing",
-        slashName: "route",
-        slashAliases: ["route-info"],
+        title: "Why this task?",
+        category: "Task",
+        slashName: "why-task",
+        slashAliases: ["route", "route-info"],
         run: () => {
           const record = local.session.lastRoute()
           if (!record) {
-            dialog.replace(() => <DialogAlert title="Routing" message="No routed prompt has been recorded yet." />)
+            dialog.replace(() => (
+              <DialogAlert title="Task choice" message="No automatic task choice has been made yet." />
+            ))
             return
           }
           const routeVerb =
-            record.kind === "created" ? "Created" : record.kind === "corrected" ? "Sent again" : "Routed"
-          const score = record.score === undefined ? "" : `\nScore: ${record.score.toFixed(1)}`
+            record.kind === "created" ? "Started" : record.kind === "corrected" ? "Also sent to" : "Sent to"
           const correctedSession = record.correctedTo
             ? sync.data.session.find((session) => session.id === record.correctedTo)
             : undefined
-          const corrected = record.correctedTo ? `\nAlso sent to: ${correctedSession?.title ?? record.correctedTo}` : ""
+          const corrected = record.correctedTo ? `\nAlso sent to ${correctedSession?.title ?? record.correctedTo}` : ""
           dialog.replace(() => (
             <DialogAlert
-              title="Last Route"
+              title="Task choice"
               message={[
                 `Prompt: ${record.prompt}`,
                 `${routeVerb}: ${record.title}`,
-                `Reason: ${record.reason}${score}${corrected}`,
+                `Why: ${record.reason}${corrected}`,
               ].join("\n")}
             />
           ))
@@ -627,8 +628,8 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       },
       {
         name: "routing.correct",
-        title: "Send last prompt to another task",
-        category: "Routing",
+        title: "Send last prompt elsewhere",
+        category: "Task",
         slashName: "resend",
         slashAliases: ["reroute", "correct-route"],
         suggested: local.session.lastRoute() !== undefined,
@@ -663,8 +664,8 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       },
       ...Array.from({ length: 9 }, (_, i) => ({
         name: `session.quick_switch.${i + 1}`,
-        title: `Switch to session in quick slot ${i + 1}`,
-        category: "Session",
+        title: `Switch to task in quick slot ${i + 1}`,
+        category: "Task",
         hidden: true,
         run: () => {
           local.session.quickSwitch(i + 1)
@@ -672,8 +673,8 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       })),
       {
         name: "session.attention.jump",
-        title: "Jump to work needing attention",
-        category: "Session",
+        title: "Open task needing attention",
+        category: "Task",
         slashName: "attention",
         run: () => {
           dialog.clear()
@@ -988,8 +989,8 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       {
         name: "app.toggle.session_directory_filter",
         title: kv.get("session_directory_filter_enabled", true)
-          ? "Disable session directory filtering"
-          : "Enable session directory filtering",
+          ? "Show tasks from every folder"
+          : "Show tasks from this folder only",
         category: "System",
         run: async () => {
           kv.set("session_directory_filter_enabled", !kv.get("session_directory_filter_enabled", true))
@@ -1064,7 +1065,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       route.navigate({ type: "home" })
       toast.show({
         variant: "info",
-        message: "The current session was deleted",
+        message: "The current task was deleted",
       })
     }
   })

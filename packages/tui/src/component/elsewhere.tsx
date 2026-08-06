@@ -49,7 +49,7 @@ export function ElsewhereStrip(props: { sessionID: string }) {
                 <Spinner color={theme.success} />
               </Show>
               <text fg={item.pending > 0 ? theme.warning : theme.textMuted}>
-                {Locale.truncate(item.session.title || "Untitled session", 20)}
+                {Locale.truncate(item.session.title || "Untitled task", 20)}
                 {item.pending > 0 ? " · needs you" : ""}
               </text>
             </box>

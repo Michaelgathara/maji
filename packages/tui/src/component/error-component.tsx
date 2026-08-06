@@ -111,7 +111,7 @@ export function ErrorComponent(props: { error: Error; reset: () => void; mode?: 
             Maji crashed
           </text>
           <Show when={showSubtext()}>
-            <text fg={colors.muted}>An unexpected error stopped the session.</text>
+            <text fg={colors.muted}>An unexpected error stopped the task.</text>
           </Show>
         </box>
 

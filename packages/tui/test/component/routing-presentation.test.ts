@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import {
   explainRouteReason,
-  routeTargetAction,
   routeTargetDetail,
   routeTargetKey,
   routeTargetTitle,
@@ -17,14 +16,13 @@ describe("routing presentation", () => {
     }
 
     expect(routeTargetKey(target)).toBe("session:ses_auth")
-    expect(routeTargetAction(target)).toBe("Continue")
     expect(routeTargetTitle(target)).toBe("OAuth callback tests")
     expect(routeTargetDetail(target, "automatic")).toBe("Matches a referenced file")
   })
 
   test("describes explicit destinations without exposing routing jargon", () => {
-    expect(routeTargetDetail({ type: "new" }, "automatic")).toBe("No related task found")
-    expect(routeTargetDetail({ type: "stay" }, "manual")).toBe("Chosen by you")
-    expect(explainRouteReason("memory match")).toBe("Matches remembered task context")
+    expect(routeTargetDetail({ type: "new" }, "automatic")).toBe("Start fresh")
+    expect(routeTargetDetail({ type: "stay" }, "manual")).toBe("You chose this task")
+    expect(explainRouteReason("memory match")).toBe("Matches this task's context")
   })
 })

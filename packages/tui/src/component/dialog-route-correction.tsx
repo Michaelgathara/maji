@@ -38,9 +38,9 @@ export function DialogRouteCorrection() {
           value: session.id,
           category: session.id === record()?.sessionID ? "Original task" : undefined,
           disabled: session.id === currentTarget(),
-          description: memory?.summary ?? session.directory,
-          details: [memory?.taskType, memory?.canonicalTopic, memory?.currentStatus, memory?.outcome].filter(
-            (item): item is string => !!item,
+          description: Locale.truncate(
+            memory?.outcome ?? memory?.canonicalTopic ?? memory?.taskType ?? session.directory,
+            48,
           ),
         }
       }),
@@ -52,7 +52,7 @@ export function DialogRouteCorrection() {
     const model = local.model.current()
     const agent = local.agent.current()
     if (!model || !agent) {
-      toast.show({ message: "Choose a model and agent before sending the prompt again.", variant: "warning" })
+      toast.show({ message: "Choose a model and agent first.", variant: "warning" })
       return
     }
     try {
@@ -82,7 +82,7 @@ export function DialogRouteCorrection() {
         kind: "corrected",
       })
       toast.show({
-        message: `Sent a copy to ${Locale.truncate(session?.title ?? sessionID, 36)}`,
+        message: `Also sent to ${Locale.truncate(session?.title ?? sessionID, 36)}`,
         variant: "success",
         duration: 2500,
       })
@@ -90,7 +90,7 @@ export function DialogRouteCorrection() {
       route.navigate({ type: "session", sessionID })
     } catch (error) {
       toast.show({
-        title: "Failed to send prompt copy",
+        title: "Could not send prompt",
         message: errorMessage(error),
         variant: "error",
       })
@@ -100,23 +100,20 @@ export function DialogRouteCorrection() {
   const latest = record()
   return (
     <DialogSelect
-      title="Send last prompt again"
-      placeholder="Choose another task"
+      title="Send last prompt elsewhere"
+      placeholder="Choose a task"
       options={options()}
       current={latest?.sessionID}
       emptyView={<text>No other tasks yet.</text>}
       footer={
         latest ? (
           <box flexDirection="column">
-            <text>This sends a copy. The original task is not cancelled.</text>
+            <text>The original task stays unchanged.</text>
             <text>{Locale.truncate(latest.prompt, 90)}</text>
-            <text>
-              {latest.kind === "created" ? "Originally created" : "Originally routed"} to{" "}
-              {Locale.truncate(latest.title, 36)} via {latest.reason}
-            </text>
+            <text>First sent to {Locale.truncate(latest.title, 36)}</text>
           </box>
         ) : (
-          <text>No routed prompt has been recorded yet.</text>
+          <text>No automatic task choice has been made yet.</text>
         )
       }
       onSelect={(option) => {

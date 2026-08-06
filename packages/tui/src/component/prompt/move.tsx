@@ -54,7 +54,7 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
       // before moving on
       await sdk.client.path.get({ directory }, { throwOnError: true })
 
-      setProgress("Creating session")
+      setProgress("Creating task")
       return directory
     } catch (err) {
       homeDestination?.clear()
@@ -126,7 +126,7 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
       dialog.clear()
       return
     }
-    setProgress("Moving session")
+    setProgress("Moving task")
     try {
       await sdk.client.experimental.controlPlane.moveSession(
         {

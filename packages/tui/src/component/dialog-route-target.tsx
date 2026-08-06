@@ -16,13 +16,13 @@ export function DialogRouteTarget(props: {
       .map((target) => ({
         title: routeTargetTitle(target),
         value: routeTargetKey(target),
-        category: routeTargetKey(target) === current() ? "Selected destination" : undefined,
+        category: routeTargetKey(target) === current() ? "Selected" : undefined,
         description:
           target.type === "session"
             ? explainRouteReason(target.reason)
             : target.type === "new"
-              ? "Start with a clean conversation"
-              : "Keep this prompt in the task currently open",
+              ? "Start fresh"
+              : "Keep working here",
       })),
   )
 
@@ -32,7 +32,7 @@ export function DialogRouteTarget(props: {
       placeholder="Search tasks"
       options={options()}
       current={current()}
-      footer={<text>The selected task receives this prompt when you press Enter.</text>}
+      footer={<text>Enter selects · esc keeps the current choice</text>}
       onSelect={(option) => {
         const target = props.targets.find((item) => routeTargetKey(item) === option.value)
         if (!target) return

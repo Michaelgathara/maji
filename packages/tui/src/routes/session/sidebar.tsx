@@ -132,7 +132,7 @@ function OtherSessions(props: { sessionID: string }) {
               backgroundColor={theme.backgroundElement}
               onMouseUp={() => route.navigate({ type: "session", sessionID: item.session.id })}
             >
-              <text fg={theme.text}>{Locale.truncate(item.session.title || "Untitled session", 24)}</text>
+              <text fg={theme.text}>{Locale.truncate(item.session.title || "Untitled task", 24)}</text>
               <box flexDirection="row" gap={1} flexShrink={0}>
                 <Show when={item.pending === 0 && item.busy}>
                   <Spinner color={theme.success} />

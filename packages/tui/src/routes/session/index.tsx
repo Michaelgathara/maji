@@ -284,7 +284,7 @@ export function Session() {
       const result = await sdk.client.session.get({ sessionID }, { throwOnError: true })
       if (!result.data) {
         toast.show({
-          message: `Session not found: ${sessionID}`,
+          message: `Task not found: ${sessionID}`,
           variant: "error",
           duration: 5000,
         })
@@ -458,10 +458,10 @@ export function Session() {
 
   const sessionCommandList = createMemo(() => [
     {
-      title: session()?.share?.url ? "Copy share link" : "Share session",
+      title: session()?.share?.url ? "Copy share link" : "Share task",
       value: "session.share",
       suggested: route.type === "session",
-      category: "Session",
+      category: "Task",
       enabled: sync.data.config.share !== "disabled",
       slash: {
         name: "share",
@@ -479,7 +479,7 @@ export function Session() {
           return
         }
         if (!kv.get("share_consent", false)) {
-          const ok = await DialogConfirm.show(dialog, "Share Session", "Are you sure you want to share it?")
+          const ok = await DialogConfirm.show(dialog, "Share task", "Are you sure you want to share it?")
           if (ok !== true) return
           kv.set("share_consent", true)
         }
@@ -490,7 +490,7 @@ export function Session() {
           .then((res) => copy(res.data!.share!.url))
           .catch((error) => {
             toast.show({
-              message: error instanceof Error ? error.message : "Failed to share session",
+              message: error instanceof Error ? error.message : "Failed to share task",
               variant: "error",
             })
           })
@@ -498,9 +498,9 @@ export function Session() {
       },
     },
     {
-      title: "Rename session",
+      title: "Rename task",
       value: "session.rename",
-      category: "Session",
+      category: "Task",
       slash: {
         name: "rename",
       },
@@ -511,7 +511,7 @@ export function Session() {
     {
       title: "Jump to message",
       value: "session.timeline",
-      category: "Session",
+      category: "Task",
       slash: {
         name: "timeline",
       },
@@ -531,9 +531,9 @@ export function Session() {
       },
     },
     {
-      title: "Fork session",
+      title: "Duplicate task",
       value: "session.fork",
-      category: "Session",
+      category: "Task",
       slash: {
         name: "fork",
       },
@@ -553,9 +553,9 @@ export function Session() {
       },
     },
     {
-      title: "Compact session",
+      title: "Summarize task",
       value: "session.compact",
-      category: "Session",
+      category: "Task",
       slash: {
         name: "compact",
         aliases: ["summarize"],
@@ -565,7 +565,7 @@ export function Session() {
         if (!selectedModel) {
           toast.show({
             variant: "warning",
-            message: "Connect a provider to summarize this session",
+            message: "Connect a provider to summarize this task",
             duration: 3000,
           })
           return
@@ -579,9 +579,9 @@ export function Session() {
       },
     },
     {
-      title: "Unshare session",
+      title: "Unshare task",
       value: "session.unshare",
-      category: "Session",
+      category: "Task",
       enabled: !!session()?.share?.url,
       slash: {
         name: "unshare",
@@ -591,10 +591,10 @@ export function Session() {
           .unshare({
             sessionID: route.sessionID,
           })
-          .then(() => toast.show({ message: "Session unshared successfully", variant: "success" }))
+          .then(() => toast.show({ message: "Task unshared successfully", variant: "success" }))
           .catch((error) => {
             toast.show({
-              message: error instanceof Error ? error.message : "Failed to unshare session",
+              message: error instanceof Error ? error.message : "Failed to unshare task",
               variant: "error",
             })
           })
@@ -604,7 +604,7 @@ export function Session() {
     {
       title: "Undo previous message",
       value: "session.undo",
-      category: "Session",
+      category: "Task",
       slash: {
         name: "undo",
       },
@@ -641,7 +641,7 @@ export function Session() {
     {
       title: "Redo",
       value: "session.redo",
-      category: "Session",
+      category: "Task",
       enabled: !!session()?.revert?.messageID,
       slash: {
         name: "redo",
@@ -667,7 +667,7 @@ export function Session() {
     {
       title: sidebarVisible() ? "Hide sidebar" : "Show sidebar",
       value: "session.sidebar.toggle",
-      category: "Session",
+      category: "Task",
       run: () => {
         batch(() => {
           const isVisible = sidebarVisible()
@@ -680,7 +680,7 @@ export function Session() {
     {
       title: conceal() ? "Disable code concealment" : "Enable code concealment",
       value: "session.toggle.conceal",
-      category: "Session",
+      category: "Task",
       run: () => {
         setConceal((prev) => !prev)
         dialog.clear()
@@ -689,7 +689,7 @@ export function Session() {
     {
       title: showTimestamps() ? "Hide timestamps" : "Show timestamps",
       value: "session.toggle.timestamps",
-      category: "Session",
+      category: "Task",
       slash: {
         name: "timestamps",
         aliases: ["toggle-timestamps"],
@@ -706,7 +706,7 @@ export function Session() {
         return "Expand thinking"
       })(),
       value: "session.toggle.thinking",
-      category: "Session",
+      category: "Task",
       slash: {
         name: "thinking",
         aliases: ["toggle-thinking"],
@@ -719,16 +719,16 @@ export function Session() {
     {
       title: showDetails() ? "Hide tool details" : "Show tool details",
       value: "session.toggle.actions",
-      category: "Session",
+      category: "Task",
       run: () => {
         setShowDetails((prev) => !prev)
         dialog.clear()
       },
     },
     {
-      title: "Toggle session scrollbar",
+      title: "Toggle scrollbar",
       value: "session.toggle.scrollbar",
-      category: "Session",
+      category: "Task",
       run: () => {
         setShowScrollbar((prev) => !prev)
         dialog.clear()
@@ -737,7 +737,7 @@ export function Session() {
     {
       title: showGenericToolOutput() ? "Hide generic tool output" : "Show generic tool output",
       value: "session.toggle.generic_tool_output",
-      category: "Session",
+      category: "Task",
       run: () => {
         setShowGenericToolOutput((prev) => !prev)
         dialog.clear()
@@ -746,7 +746,7 @@ export function Session() {
     {
       title: "Page up",
       value: "session.page.up",
-      category: "Session",
+      category: "Task",
       hidden: true,
       run: () => {
         scroll.scrollBy(-scroll.height / 2)
@@ -756,7 +756,7 @@ export function Session() {
     {
       title: "Page down",
       value: "session.page.down",
-      category: "Session",
+      category: "Task",
       hidden: true,
       run: () => {
         scroll.scrollBy(scroll.height / 2)
@@ -766,7 +766,7 @@ export function Session() {
     {
       title: "Line up",
       value: "session.line.up",
-      category: "Session",
+      category: "Task",
       hidden: true,
       run: () => {
         scroll.scrollBy(-1)
@@ -776,7 +776,7 @@ export function Session() {
     {
       title: "Line down",
       value: "session.line.down",
-      category: "Session",
+      category: "Task",
       hidden: true,
       run: () => {
         scroll.scrollBy(1)
@@ -786,7 +786,7 @@ export function Session() {
     {
       title: "Half page up",
       value: "session.half.page.up",
-      category: "Session",
+      category: "Task",
       hidden: true,
       run: () => {
         scroll.scrollBy(-scroll.height / 4)
@@ -796,7 +796,7 @@ export function Session() {
     {
       title: "Half page down",
       value: "session.half.page.down",
-      category: "Session",
+      category: "Task",
       hidden: true,
       run: () => {
         scroll.scrollBy(scroll.height / 4)
@@ -806,7 +806,7 @@ export function Session() {
     {
       title: "First message",
       value: "session.first",
-      category: "Session",
+      category: "Task",
       hidden: true,
       run: () => {
         scroll.scrollTo(0)
@@ -816,7 +816,7 @@ export function Session() {
     {
       title: "Last message",
       value: "session.last",
-      category: "Session",
+      category: "Task",
       hidden: true,
       run: () => {
         scroll.scrollTo(scroll.scrollHeight)
@@ -826,7 +826,7 @@ export function Session() {
     {
       title: "Jump to last user message",
       value: "session.messages_last_user",
-      category: "Session",
+      category: "Task",
       hidden: true,
       run: () => {
         const messages = sync.data.message[route.sessionID]
@@ -857,21 +857,21 @@ export function Session() {
     {
       title: "Next message",
       value: "session.message.next",
-      category: "Session",
+      category: "Task",
       hidden: true,
       run: () => scrollToMessage("next", dialog),
     },
     {
       title: "Previous message",
       value: "session.message.previous",
-      category: "Session",
+      category: "Task",
       hidden: true,
       run: () => scrollToMessage("prev", dialog),
     },
     {
       title: "Copy last assistant message",
       value: "messages.copy",
-      category: "Session",
+      category: "Task",
       run: () => {
         const revertID = session()?.revert?.messageID
         const lastAssistantMessage = messages().findLast(
@@ -912,9 +912,9 @@ export function Session() {
       },
     },
     {
-      title: "Copy session transcript",
+      title: "Copy task transcript",
       value: "session.copy",
-      category: "Session",
+      category: "Task",
       slash: {
         name: "copy",
       },
@@ -934,17 +934,17 @@ export function Session() {
             },
           )
           await clipboard.write?.(transcript)
-          toast.show({ message: "Session transcript copied to clipboard!", variant: "success" })
+          toast.show({ message: "Task transcript copied to clipboard!", variant: "success" })
         } catch {
-          toast.show({ message: "Failed to copy session transcript", variant: "error" })
+          toast.show({ message: "Failed to copy task transcript", variant: "error" })
         }
         dialog.clear()
       },
     },
     {
-      title: "Export session transcript",
+      title: "Export task transcript",
       value: "session.export",
-      category: "Session",
+      category: "Task",
       slash: {
         name: "export",
       },
@@ -954,7 +954,7 @@ export function Session() {
           if (!sessionData) return
           const sessionMessages = messages()
 
-          const defaultFilename = `session-${sessionData.id.slice(0, 8)}.md`
+          const defaultFilename = `task-${sessionData.id.slice(0, 8)}.md`
 
           const options = await DialogExportOptions.show(
             dialog,
@@ -1008,10 +1008,10 @@ export function Session() {
               await writeExport(filepath, result)
             }
 
-            toast.show({ message: `Session exported to ${filename}`, variant: "success" })
+            toast.show({ message: `Task exported to ${filename}`, variant: "success" })
           }
         } catch {
-          toast.show({ message: "Failed to export session", variant: "error" })
+          toast.show({ message: "Failed to export task", variant: "error" })
         }
         dialog.clear()
       },
@@ -1019,7 +1019,7 @@ export function Session() {
     {
       title: "Background subagents",
       value: "session.background",
-      category: "Session",
+      category: "Task",
       hidden: true,
       enabled: foregroundTasks().length > 0,
       run: () => {
@@ -1031,9 +1031,9 @@ export function Session() {
       },
     },
     {
-      title: "Go to child session",
+      title: "Go to child task",
       value: "session.child.first",
-      category: "Session",
+      category: "Task",
       hidden: true,
       run: () => {
         dialog.clear()
@@ -1041,9 +1041,9 @@ export function Session() {
       },
     },
     {
-      title: "Go to parent session",
+      title: "Go to parent task",
       value: "session.parent",
-      category: "Session",
+      category: "Task",
       hidden: true,
       enabled: !!session()?.parentID,
       run: childSessionHandler(() => {
@@ -1058,9 +1058,9 @@ export function Session() {
       }),
     },
     {
-      title: "Next child session",
+      title: "Next child task",
       value: "session.child.next",
-      category: "Session",
+      category: "Task",
       hidden: true,
       enabled: !!session()?.parentID,
       run: childSessionHandler(() => {
@@ -1069,9 +1069,9 @@ export function Session() {
       }),
     },
     {
-      title: "Previous child session",
+      title: "Previous child task",
       value: "session.child.previous",
-      category: "Session",
+      category: "Task",
       hidden: true,
       enabled: !!session()?.parentID,
       run: childSessionHandler(() => {

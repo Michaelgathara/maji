@@ -341,7 +341,7 @@ describe("transcript", () => {
       const result = formatTranscript(session, messages, options)
 
       expect(result).toContain("# Test Session")
-      expect(result).toContain("**Session ID:** ses_abc123")
+      expect(result).toContain("**Task ID:** ses_abc123")
       expect(result).toContain("## User")
       expect(result).toContain("Hello")
       expect(result).toContain("## Assistant (Build · Claude Sonnet 4 · 0.5s)")

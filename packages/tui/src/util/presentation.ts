@@ -31,7 +31,7 @@ export function sessionEpilogue(input: { title: string; sessionID?: string }) {
   return [
     ...wordmark("  "),
     "",
-    `  ${weak("Session")}${bold}${input.title}${reset}`,
+    `  ${weak("Task")}${bold}${input.title}${reset}`,
     `  ${weak("Continue")}${bold}maji -s ${input.sessionID}${reset}`,
     "",
   ].join("\n")

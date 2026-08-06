@@ -57,14 +57,7 @@ import { usePromptWorkspace } from "./workspace"
 import { usePromptMove } from "./move"
 import { readLocalAttachment } from "./local-attachment"
 import { DialogRouteTarget } from "../dialog-route-target"
-import {
-  routeTargetAction,
-  routeTargetDetail,
-  routeTargetTitle,
-  type DeliverySource,
-  type RouteCandidate,
-  type RouteTarget,
-} from "./routing-presentation"
+import { routeTargetTitle, type DeliverySource, type RouteCandidate, type RouteTarget } from "./routing-presentation"
 import { useLocation } from "../../context/location"
 
 registerOpencodeSpinner()
@@ -398,9 +391,9 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
-        title: "Interrupt session",
+        title: "Stop task",
         name: "session.interrupt",
-        category: "Session",
+        category: "Task",
         hidden: true,
         enabled: status().type !== "idle",
         run: () => {
@@ -430,7 +423,7 @@ export function Prompt(props: PromptProps) {
       },
       {
         title: "Open editor",
-        category: "Session",
+        category: "Prompt",
         name: "prompt.editor",
         slashName: "editor",
         run: async () => {
@@ -541,10 +534,10 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
-        title: "Warp",
-        desc: "Change the workspace for the session",
+        title: "Change task workspace",
+        desc: "Change the workspace for this task",
         name: "workspace.set",
-        category: "Session",
+        category: "Task",
         enabled: Flag.OPENCODE_EXPERIMENTAL_WORKSPACES,
         slashName: "warp",
         run: () => {
@@ -552,10 +545,10 @@ export function Prompt(props: PromptProps) {
         },
       },
       {
-        title: "Move session",
+        title: "Move task",
         desc: "Move to another project dir",
         name: "session.move",
-        category: "Session",
+        category: "Task",
         slashName: "move",
         run: () => {
           move.open()
@@ -1094,7 +1087,7 @@ export function Prompt(props: PromptProps) {
     const target = routeTarget()
     const source: DeliverySource = currentRouteOverride() ? "manual" : "automatic"
     if (target.type === "stay" && source !== "manual") return undefined
-    // A lone "new session" on home is the obvious default; only surface it
+    // A lone new task on home is the obvious default; only surface it
     // once there are real alternatives or the user started cycling.
     if (target.type === "new" && !props.sessionID && source !== "manual" && routeTargets().length <= 1) return undefined
     return { target, source }
@@ -1216,9 +1209,7 @@ export function Prompt(props: PromptProps) {
         score: routing.score,
       }
       toast.show({
-        message: props.sessionID
-          ? `Switched to ${Locale.truncate(routing.title, 36)} (${routing.reason})`
-          : `Routed to ${Locale.truncate(routing.title, 36)} (${routing.reason})`,
+        message: `Sent to ${Locale.truncate(routing.title, 36)}`,
         variant: "success",
         duration: 2500,
       })
@@ -1247,7 +1238,7 @@ export function Prompt(props: PromptProps) {
         console.log("Creating a session failed:", res.error)
 
         toast.show({
-          message: "Creating a session failed. Open console for more details.",
+          message: "Creating the task failed. Open console for more details.",
           variant: "error",
         })
 
@@ -1258,7 +1249,7 @@ export function Prompt(props: PromptProps) {
       routeRecord = {
         kind: "created",
         title: res.data.title,
-        reason: "new session",
+        reason: "started a new task",
       }
     }
     const workspaceSession = sync.session.get(sessionID)
@@ -1693,12 +1684,11 @@ export function Prompt(props: PromptProps) {
               {(plan) => (
                 <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1}>
                   <text fg={theme.accent}>→</text>
-                  <text fg={theme.textMuted}>{routeTargetAction(plan().target)}</text>
+                  <text fg={theme.textMuted}>To</text>
                   <text fg={theme.text}>{Locale.truncate(routeTargetTitle(plan().target), 36)}</text>
-                  <text fg={theme.textMuted}>
-                    · {routeTargetDetail(plan().target, plan().source)}
-                    {routeCycleShortcut() ? ` · ${routeCycleShortcut()} choose` : ""}
-                  </text>
+                  <Show when={routeCycleShortcut()}>
+                    <text fg={theme.textMuted}>· {routeCycleShortcut()} change</text>
+                  </Show>
                 </box>
               )}
             </Show>
