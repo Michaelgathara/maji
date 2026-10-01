@@ -2,6 +2,12 @@ import { DESKTOP_NATIVE_ENGLISH } from "./desktop-native"
 
 export const dict = {
   ...DESKTOP_NATIVE_ENGLISH,
+  "prompt.delivery.sending": "Sending…",
+  "prompt.delivery.reconnecting": "Saved on this device · Reconnecting…",
+  "prompt.delivery.accepted": "Saved · Waiting for the next step",
+  "prompt.delivery.failed": "Delivery needs attention · Message kept on this device",
+  "prompt.delivery.paused": "Paused · Message kept on this device",
+  "prompt.delivery.retry": "Retry",
   "command.category.suggested": "Suggested",
   "command.category.view": "View",
   "command.category.project": "Project",

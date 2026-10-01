@@ -41,6 +41,7 @@ export namespace Timeline {
     status: SessionStatus["type"],
     inlineComments: boolean,
     projectedUserMessages: UserMessage[],
+    pendingMessageIDs?: ReadonlySet<string>,
   ) {
     const turns: { user: UserMessage; assistants: AssistantMessage[] }[] = []
     const turnByUserID = new Map<string, (typeof turns)[number]>()
@@ -72,9 +73,18 @@ export namespace Timeline {
       turns.push(turn)
       turnByUserID.set(user.id, turn)
     })
+    const latestUserMessage = turns.at(-1)?.user
     projectedUserMessages.forEach((user) => {
       if (turnByUserID.has(user.id)) return
+      const older = latestUserMessage && compareMessages(user, latestUserMessage) < 0
+      const pending = pendingMessageIDs?.has(user.id) ?? false
+      if (older && !pending) return
       const turn = { user, assistants: [] }
+      if (older && pending) {
+        turns.push(turn)
+        turnByUserID.set(user.id, turn)
+        return
+      }
       const index = turns.findIndex((item) => compareMessages(user, item.user) < 0)
       if (index < 0) turns.push(turn)
       if (index >= 0) turns.splice(index, 0, turn)

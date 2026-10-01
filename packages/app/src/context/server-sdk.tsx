@@ -410,6 +410,13 @@ type SDKEventMap = {
 }
 
 function createDirSdkContext(directory: string, serverSDK: ServerSDKBase) {
+  const createApi = (directory: string) =>
+    createCompatibleApi({
+      protocol: serverSDK.protocol,
+      current: serverSDK.currentApi,
+      legacy: (next) => serverSDK.createClient({ directory: next ?? directory, throwOnError: true }),
+      directory,
+    })
   const client = serverSDK.createClient({
     directory,
     throwOnError: true,
@@ -427,12 +434,8 @@ function createDirSdkContext(directory: string, serverSDK: ServerSDKBase) {
     protocol: serverSDK.protocol,
     directory,
     client,
-    api: createCompatibleApi({
-      protocol: serverSDK.protocol,
-      current: serverSDK.currentApi,
-      legacy: (next) => serverSDK.createClient({ directory: next ?? directory, throwOnError: true }),
-      directory,
-    }),
+    api: createApi(directory),
+    createApi,
     event: emitter,
     get url() {
       return serverSDK.url

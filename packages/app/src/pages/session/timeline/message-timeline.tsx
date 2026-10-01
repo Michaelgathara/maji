@@ -60,11 +60,13 @@ import { normalize } from "@opencode-ai/session-ui/session-diff"
 import { useFileComponent } from "@opencode-ai/ui/context/file"
 import { shouldMarkBoundaryGesture, normalizeWheelDelta } from "@/pages/session/message-gesture"
 import { SessionContextUsage } from "@/components/session-context-usage"
+import { MessageDelivery } from "@/components/message-delivery"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useLanguage } from "@/context/language"
 import { useSessionKey } from "@/pages/session/session-layout"
 import { useSessionArchive } from "@/pages/session/session-archive"
 import { useServerSDK } from "@/context/server-sdk"
+import { useServerSync } from "@/context/server-sync"
 import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
 import { legacySessionHref, requireServerKey, sessionHref } from "@/utils/session-route"
@@ -291,6 +293,15 @@ export function MessageTimeline(props: {
     const index = messages.findIndex((message) => message.id === boundary)
     return index < 0 ? messages : messages.slice(0, index)
   })
+  const serverSync = useServerSync()
+  const pendingMessageIDs = createMemo(
+    () =>
+      new Set(
+        Object.values(serverSync().outbox.entries).flatMap((entry) =>
+        entry && entry.request.sessionID === sessionID() ? [entry.request.id] : [],
+        ),
+      ),
+  )
   const info = createMemo(() => {
     const id = sessionID()
     if (!id) return
@@ -334,6 +345,7 @@ export function MessageTimeline(props: {
     messages: sessionMessages,
     userMessages: () => props.userMessages,
     sessionMessages: projectedMessages,
+    pendingMessageIDs,
     parts: getMsgParts,
     status: sessionStatus,
     showReasoningSummaries: settings.general.showReasoningSummaries,
@@ -1140,6 +1152,7 @@ export function MessageTimeline(props: {
                       useV2Actions={settings.general.newLayoutDesigns()}
                       comments={messageComments()}
                     />
+                    <MessageDelivery sessionID={message().sessionID} messageID={message().id} />
                   </div>
                 </div>
               )}

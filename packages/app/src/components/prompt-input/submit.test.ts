@@ -2,8 +2,15 @@ import { beforeAll, beforeEach, describe, expect, mock, test } from "bun:test"
 import { createStore } from "solid-js/store"
 import type { Prompt, PromptStore } from "@/context/prompt"
 import type { ModelSelection } from "@/context/local"
+import { createPromptOutbox, type OutboxEntry } from "@/utils/prompt-outbox"
 
 let createPromptSubmit: typeof import("./submit").createPromptSubmit
+let selectedSDK = "a"
+let durable = false
+let resetCount = 0
+let storageGate: Promise<void> | undefined
+const outboxRows = new Map<string, OutboxEntry>()
+let outbox: ReturnType<typeof createPromptOutbox>
 
 const createdClients: string[] = []
 const createdSessions: string[] = []
@@ -57,7 +64,9 @@ const prompt = {
     current: () => undefined,
     set: () => undefined,
   },
-  reset: () => undefined,
+  reset: () => {
+    resetCount++
+  },
   set: () => undefined,
   context: {
     add: () => undefined,
@@ -117,6 +126,7 @@ const clientFor = (directory: string) => {
 
 beforeAll(async () => {
   const rootClient = clientFor("/repo/main")
+  const otherClient = clientFor("/repo/other")
 
   mock.module("@solidjs/router", () => ({
     useNavigate: () => () => undefined,
@@ -135,6 +145,7 @@ beforeAll(async () => {
   mock.module("@opencode-ai/ui/toast", () => ({
     Toast: { Region: () => null },
     showToast: () => 0,
+    toaster: { dismiss: () => undefined },
   }))
 
   mock.module("@opencode-ai/core/util/encode", () => ({
@@ -203,8 +214,10 @@ beforeAll(async () => {
         createClient(opts: any) {
           return clientFor(opts.directory)
         },
+        createApi: (directory: string) => clientFor(directory).api,
       }
-      return () => sdk
+      const other = { ...sdk, scope: "server-b", directory: "/repo/other", api: otherClient.api }
+      return () => (selectedSDK === "a" ? sdk : other)
     },
   }))
 
@@ -234,6 +247,7 @@ beforeAll(async () => {
 
   mock.module("@/context/server-sync", () => ({
     useServerSync: () => () => ({
+      outbox: { ...outbox, enabled: Promise.resolve(durable) },
       session: {
         remember: () => undefined,
         set: () => undefined,
@@ -279,6 +293,39 @@ beforeAll(async () => {
 })
 
 beforeEach(() => {
+  selectedSDK = "a"
+  durable = false
+  resetCount = 0
+  storageGate = undefined
+  outboxRows.clear()
+  outbox = createPromptOutbox({
+    scope: "local",
+    storage: {
+      list: async () => [],
+      put: async (entry) => {
+        await storageGate
+        outboxRows.set(entry.request.id, structuredClone(entry))
+      },
+      remove: async (_scope, id) => {
+        outboxRows.delete(id)
+      },
+    },
+    send: async (request) => {
+      promptInputs.push(request)
+      return {
+        id: request.id,
+        sessionID: request.sessionID,
+        admittedSeq: 1,
+        type: "user",
+        data: { text: request.text },
+        timeCreated: 1,
+        delivery: request.delivery ?? "steer",
+      }
+    },
+    promoted: async () => false,
+    restore: (entry) => optimistic.push({ message: entry.message, sessionID: entry.request.sessionID }),
+    change: () => undefined,
+  })
   createdClients.length = 0
   createdSessions.length = 0
   sessionCreateInputs.length = 0
@@ -594,5 +641,79 @@ describe("prompt submit worktree selection", () => {
     expect(storedSessions["/repo/worktree-a"]).toHaveLength(1)
     expect(storedSessions["/repo/worktree-a"]?.[0]).toMatchObject({ id: "session-1", title: "New session 1" })
     expect(optimisticSeeded).toEqual([true])
+  })
+})
+
+function submissionInput(overrides: Partial<Parameters<typeof createPromptSubmit>[0]> = {}) {
+  return {
+    prompt,
+    info: () => ({ id: "session-1" }),
+    imageAttachments: () => [],
+    commentCount: () => 0,
+    autoAccept: () => false,
+    mode: () => "normal" as const,
+    working: () => false,
+    editor: () => undefined,
+    queueScroll: () => undefined,
+    promptLength: () => 2,
+    addToHistory: () => undefined,
+    resetHistoryNavigation: () => undefined,
+    setMode: () => undefined,
+    setPopover: () => undefined,
+    ...overrides,
+  }
+}
+
+describe("durable submission routing", () => {
+  test("persists before clearing and coalesces a repeated Send on the same draft", async () => {
+    params = { id: "session-1" }
+    durable = true
+    const gate = Promise.withResolvers<void>()
+    storageGate = gate.promise
+    const submit = createPromptSubmit(submissionInput())
+    const event = { preventDefault() {} } as Event
+    const first = submit.handleSubmit(event)
+    const repeated = submit.handleSubmit(event)
+    expect(first).toBe(repeated)
+    await Bun.sleep(0)
+    expect(resetCount).toBe(0)
+    expect(promptInputs).toHaveLength(0)
+    gate.resolve()
+    await first
+    await outbox.flush()
+    expect(resetCount).toBe(1)
+    expect(outboxRows.size).toBe(1)
+    expect(promptInputs).toHaveLength(1)
+  })
+
+  test("keeps a newer draft when the original finishes saving", async () => {
+    params = { id: "session-1" }
+    durable = true
+    const gate = Promise.withResolvers<void>()
+    storageGate = gate.promise
+    const submit = createPromptSubmit(submissionInput())
+    const sending = submit.handleSubmit({ preventDefault() {} } as Event)
+    await Bun.sleep(0)
+    promptValue = [{ type: "text", content: "new draft", start: 0, end: 9 }]
+    gate.resolve()
+    await sending
+    await outbox.flush()
+    expect(resetCount).toBe(0)
+    expect(promptValue[0]).toMatchObject({ content: "new draft" })
+    expect(promptInputs[0]).toMatchObject({ text: "ls", sessionID: "session-1" })
+  })
+
+  test("finishes a new-session send on its original server after navigation", async () => {
+    const gate = Promise.withResolvers<void>()
+    createSessionGate = gate.promise
+    const submit = createPromptSubmit(submissionInput({ info: () => (params.id ? { id: params.id } : undefined) }))
+    const sending = submit.handleSubmit({ preventDefault() {} } as Event)
+    selectedSDK = "b"
+    params.id = "other-session"
+    gate.resolve()
+    await sending
+    expect(sentPrompts).toEqual(["/repo/main"])
+    expect(promptInputs[0]).toMatchObject({ sessionID: "session-1", text: "ls" })
+    expect(promoted).toHaveLength(0)
   })
 })

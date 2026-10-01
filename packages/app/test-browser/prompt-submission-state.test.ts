@@ -5,12 +5,14 @@ import { createPromptSubmissionState } from "@/components/prompt-input/submissio
 describe("prompt submission state", () => {
   test("keeps failed submission restoration with the prompt where it started", () => {
     const target = createPromptState()
+    target.set([{ type: "text", content: "prompt-A", start: 0, end: 8 }])
     const submission = createPromptSubmissionState({
       target,
-      prompt: [{ type: "text", content: "prompt-A", start: 0, end: 8 }],
+      prompt: target.current(),
       context: [{ key: "file:src/index.ts:undefined:undefined", type: "file", path: "src/index.ts" }],
     })
 
+    submission.clear()
     expect(submission.restore()).toEqual({
       target,
       prompt: [{ type: "text", content: "prompt-A", start: 0, end: 8 }],
@@ -28,6 +30,7 @@ describe("prompt submission state", () => {
     })
 
     submission.retarget(session)
+    submission.clear()
 
     expect(submission.restore()).toEqual({
       target: session,
@@ -69,5 +72,24 @@ describe("prompt submission state", () => {
 
     expect(submission.restore()).toBeUndefined()
     expect(target.current()[0]).toMatchObject({ type: "text", content: "new draft" })
+  })
+
+  test("does not clear or restore over edits made while persistence is pending", () => {
+    const target = createPromptState()
+    target.set([{ type: "text", content: "submitted", start: 0, end: 9 }])
+    const submission = createPromptSubmissionState({ target, prompt: target.current(), context: [] })
+    target.set([{ type: "text", content: "new draft", start: 0, end: 9 }])
+    expect(submission.clear()).toBe(false)
+    expect(submission.restore()).toBeUndefined()
+    expect(submission.prompt[0]).toMatchObject({ content: "submitted" })
+    expect(target.current()[0]).toMatchObject({ content: "new draft" })
+  })
+
+  test("leaves the original draft intact when local persistence fails before clearing", () => {
+    const target = createPromptState()
+    target.set([{ type: "text", content: "submitted", start: 0, end: 9 }])
+    const submission = createPromptSubmissionState({ target, prompt: target.current(), context: [] })
+    expect(submission.restore()).toBeUndefined()
+    expect(target.current()[0]).toMatchObject({ content: "submitted" })
   })
 })

@@ -59,6 +59,7 @@ import type {
 } from "@opencode-ai/client/promise"
 import { toggleMcp } from "./global-sync/mcp"
 import { createServerSession, type ServerSession } from "./server-session"
+import { createServerOutbox } from "./server-outbox"
 
 type GlobalStore = {
   ready: boolean
@@ -227,6 +228,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
   const session = createServerSession(serverSDK.client, serverSDK.api.session, serverSDK.api.message, {
     protocol: serverSDK.protocol,
   })
+  const outbox = createServerOutbox(serverSDK, session)
   const queryOptionsApi = makeQueryOptionsApi(
     serverSDK.scope,
     () => serverSDK.client,
@@ -536,6 +538,14 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
     const recent = bootingRoot || Date.now() - bootedAt < 1500
 
     if (event.current) session.applyV2(event.current)
+    if (event.current?.type === "session.input.promoted")
+      void outbox
+        .confirm(event.current.data.sessionID, event.current.data.inputID)
+        .catch((error: unknown) => console.error("Prompt outbox confirmation failed", error))
+    if (event.current?.type === "session.execution.interrupted" || event.current?.type === "session.execution.failed")
+      void outbox
+        .pause(event.current.data.sessionID)
+        .catch((error: unknown) => console.error("Prompt outbox pause failed", error))
     session.apply(event)
     if (event.type === "session.created" || event.type === "session.updated" || event.type === "session.deleted") {
       homeSessions.apply(event)
@@ -688,6 +698,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
     updateConfig: updateConfigMutation.mutateAsync,
     project: projectApi,
     session,
+    outbox,
     homeSessions,
     mcp: {
       toggle: async (directory: string, name: string) => {

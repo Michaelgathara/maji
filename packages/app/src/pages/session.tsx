@@ -1724,10 +1724,12 @@ export default function Page() {
       setFollowup("failed", input.sessionID, undefined)
 
       const ok = await sendFollowupDraft({
+        scope: sdk().scope,
         api: sdk().api.session,
         sync: sync(),
         serverSync: serverSync(),
         draft: item,
+        messageID: item.id,
         optimisticBusy: item.sessionDirectory === sdk().directory,
       }).catch((err) => {
         setFollowup("failed", input.sessionID, input.id)

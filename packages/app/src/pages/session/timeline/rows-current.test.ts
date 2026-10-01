@@ -205,3 +205,26 @@ describe("current session timeline rows", () => {
     expect(result.rows.map((row) => row._tag)).toEqual(["UserMessage", "AssistantPart"])
   })
 })
+
+test("keeps an older undelivered user message visible beside newer durable messages", () => {
+  const source = [
+    { id: "msg_1", type: "user", text: "still sending", time: { created: 1 } },
+    { id: "msg_2", type: "user", text: "from another client", time: { created: 2 } },
+  ] satisfies SessionMessageInfo[]
+  const normalized = normalizeSessionMessages("ses_1", source)
+  const messages = new Map(normalized.messages.map((message) => [message.id, message]))
+  const result = Timeline.constructSessionMessageRows(
+    source.slice(1),
+    (id) => messages.get(id),
+    (id) => normalized.parts.get(id) ?? [],
+    true,
+    "idle",
+    true,
+    normalized.messages.filter((message) => message.role === "user"),
+    new Set(["msg_1"]),
+  )
+  expect(result.rows.filter((row) => row._tag === "UserMessage").map((row) => row.userMessageID)).toEqual([
+    "msg_2",
+    "msg_1",
+  ])
+})
