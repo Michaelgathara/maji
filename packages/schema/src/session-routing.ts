@@ -1,7 +1,7 @@
-export * as SessionRouting from "./session-routing"
+export * as SessionRouting from "./session-routing.js"
 
 import { Schema } from "effect"
-import { SessionID } from "./session-id"
+import { SessionID } from "./session-id.js"
 
 export const StatusHint = Schema.Literals(["needs-input", "active", "done", "idle"])
 export type StatusHint = typeof StatusHint.Type
