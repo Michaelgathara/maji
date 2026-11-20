@@ -41,8 +41,9 @@ export default function rehypeHeadings() {
 function headingText(node: Element) {
   let text = ""
   visit(node, (child) => {
-    if (child.type === "text" || child.type === "raw" || child.type === "mdxTextExpression")
-      text += (child as { value: string }).value
+    if (!["text", "raw", "mdxTextExpression"].includes(child.type)) return
+    if (!("value" in child) || typeof child.value !== "string") return
+    text += child.value
   })
   return text
 }
