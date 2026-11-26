@@ -72,14 +72,15 @@ import { truncateFilePath } from "../../ui/file-path"
 import { PromptMetadataRow } from "./metadata"
 import { limitLabel, useUsageLimits } from "../usage"
 import { DialogRouteTarget } from "../dialog-route-target"
+import { automaticRouteTarget, routeTargetTitle, type DeliverySource, type RouteTarget } from "./routing-presentation"
 import {
-  automaticRouteTarget,
-  routeTargetTitle,
-  type DeliverySource,
-  type RouteCandidate,
-  type RouteTarget,
-} from "./routing-presentation"
-import type { SessionRoutingDecision } from "@opencode/client/promise"
+  createRouteState,
+  routeView,
+  sameRouteDraft,
+  transitionRoute,
+  type RouteDraft,
+  type RouteEvent,
+} from "./routing-machine"
 
 export type PromptProps = {
   sessionID?: string
@@ -197,8 +198,15 @@ export function Prompt(props: PromptProps) {
   let anchor: BoxRenderable
   const [inputTarget, setInputTarget] = createSignal<TextareaRenderable | undefined>()
 
+  const [routing, setRouting] = createSignal(createRouteState())
+  const routingView = createMemo(() => routeView(routing()))
+  const dispatchRouting = (event: RouteEvent) => {
+    const next = transitionRoute(routing(), event)
+    setRouting(next)
+    return next
+  }
   const enabled = useInteractivity()
-  const disabled = () => props.disabled || !enabled()
+  const disabled = () => props.disabled || !enabled() || routingView().busy
   const leader = Keymap.useLeaderActive()
   const muted = () => leader() || props.muted
   const local = useLocal()
@@ -1108,24 +1116,6 @@ export function Prompt(props: PromptProps) {
     }
   })
 
-  type RouteDraft = {
-    text: string
-    currentSessionID?: string
-    directory?: string
-  }
-
-  type RoutePreview = RouteDraft & {
-    decision: SessionRoutingDecision
-    candidates: RouteCandidate[]
-  }
-
-  type RouteOverride = RouteDraft & {
-    target: RouteTarget
-  }
-
-  const [routePreview, setRoutePreview] = createSignal<RoutePreview | undefined>()
-  const [routeOverride, setRouteOverride] = createSignal<RouteOverride | undefined>()
-
   function expandedPromptText() {
     return expandTrackedPastedText(
       store.prompt.text,
@@ -1145,62 +1135,46 @@ export function Prompt(props: PromptProps) {
     return {
       text,
       currentSessionID: props.sessionID,
+      server: client.url ?? "",
       directory: currentLocation.current?.directory ?? data.location.default().directory,
     }
   })
 
-  function sameRouteDraft(value: RouteDraft, draft: RouteDraft | undefined) {
-    return (
-      draft !== undefined &&
-      value.text === draft.text &&
-      value.currentSessionID === draft.currentSessionID &&
-      value.directory === draft.directory
-    )
-  }
-
   const currentRoutePreview = createMemo(() => {
-    const preview = routePreview()
+    const preview = routingView().preview
     return preview && sameRouteDraft(preview, routeDraft()) ? preview : undefined
   })
 
   const currentRouteOverride = createMemo(() => {
-    const override = routeOverride()
+    const override = routingView().override
     return override && sameRouteDraft(override, routeDraft()) ? override : undefined
   })
 
   let routeTimer: ReturnType<typeof setTimeout> | undefined
-  let routeSequence = 0
+  let previewController: AbortController | undefined
+  let submissionController: AbortController | undefined
   createEffect(
-    on(
-      () => routeDraft(),
-      (draft) => {
-        if (routeTimer) clearTimeout(routeTimer)
-        routeSequence++
-        setRoutePreview(undefined)
-        setRouteOverride((override) => (override && sameRouteDraft(override, draft) ? override : undefined))
-        if (!draft) return
-        const sequence = routeSequence
-        routeTimer = setTimeout(() => {
-          client.api.experimental.session
-            .route(draft)
-            .then((result) => {
-              if (sequence !== routeSequence) return
-              setRoutePreview({
-                ...draft,
-                decision: result.decision,
-                candidates: [...result.candidates],
-              })
-            })
-            .catch(() => {
-              if (sequence === routeSequence) setRoutePreview(undefined)
-            })
-        }, 300)
-      },
-    ),
+    on(routeDraft, (draft) => {
+      if (routeTimer) clearTimeout(routeTimer)
+      previewController?.abort()
+      const next = dispatchRouting({ type: "changed", draft })
+      if (!draft) return
+      const controller = new AbortController()
+      previewController = controller
+      routeTimer = setTimeout(() => {
+        client.api.experimental.session.route(draft, { signal: controller.signal }).then(
+          (result) => dispatchRouting({ type: "resolved", revision: next.revision, result }),
+          (error: unknown) => dispatchRouting({ type: "failed", revision: next.revision, error: errorMessage(error) }),
+        )
+      }, 300)
+    }),
   )
 
   onCleanup(() => {
     if (routeTimer) clearTimeout(routeTimer)
+    previewController?.abort()
+    submissionController?.abort()
+    dispatchRouting({ type: "disposed" })
   })
 
   const routeTargets = createMemo<RouteTarget[]>(() => {
@@ -1232,12 +1206,13 @@ export function Prompt(props: PromptProps) {
   function chooseRouteTarget() {
     const draft = routeDraft()
     const targets = routeTargets()
+    const revision = routingView().revision
     if (!draft || targets.length < 2) return
     dialog.replace(() => (
       <DialogRouteTarget
         targets={targets}
         current={routeTarget()}
-        onSelect={(target) => setRouteOverride({ ...draft, target })}
+        onSelect={(target) => dispatchRouting({ type: "choose", revision, target })}
       />
     ))
   }
@@ -1299,6 +1274,30 @@ export function Prompt(props: PromptProps) {
       renderer.widthMethod,
     )
     const routingDraft = routeDraft()
+    if (routingDraft && !currentRouteOverride() && !currentRoutePreview()) {
+      if (routeTimer) clearTimeout(routeTimer)
+      previewController?.abort()
+      dispatchRouting({ type: "changed", draft: routingDraft })
+      const resolving = dispatchRouting({ type: "resolve", revision: routingView().revision })
+      const controller = new AbortController()
+      submissionController = controller
+      const result = await client.api.experimental.session
+        .route(routingDraft, {
+          signal: AbortSignal.any([controller.signal, AbortSignal.timeout(10_000)]),
+        })
+        .then(
+          (value) => ({ value }),
+          (error: unknown) => ({ error }),
+        )
+      if (disposed || routing().revision !== resolving.revision || !sameRouteDraft(routingDraft, routeDraft()))
+        return false
+      if ("error" in result) {
+        dispatchRouting({ type: "failed", revision: resolving.revision, error: errorMessage(result.error) })
+        toast.show({ title: "Could not choose a task", message: errorMessage(result.error), variant: "error" })
+        return false
+      }
+      dispatchRouting({ type: "resolved", revision: resolving.revision, result: result.value })
+    }
     const routingOverride = currentRouteOverride()
     const routingPreview = currentRoutePreview()
     const routingTarget =
@@ -1349,7 +1348,7 @@ export function Prompt(props: PromptProps) {
       return false
     }
 
-    // Snapshot the composer and clear it synchronously, before the first await.
+    // Routing has settled. Snapshot and clear before asynchronous session preparation.
     // Everything below reads the snapshot: text typed while a request is in
     // flight lands in the already-empty composer and survives, and prompt
     // history records exactly what was submitted instead of the live store
