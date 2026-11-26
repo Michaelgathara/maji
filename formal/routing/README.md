@@ -1,6 +1,6 @@
 # Maji routing contract
 
-Status: **machine-checked reference specification with production decision-policy conformance tests**. The pure TypeScript policy in `packages/core/src/session/routing-policy.ts` is compared with an executable Lean oracle over 2,920 cases. This is conformance evidence, not a formal equivalence proof. Preview, submission, and delivery integration still need their own runtime coverage.
+Status: **machine-checked reference specification with production decision-policy conformance tests**. The pure TypeScript policy in `packages/core/src/session/routing-policy.ts` is compared with an executable Lean oracle over 2,920 cases. This is conformance evidence, not a formal equivalence proof. Preview, submission, and delivery integrations are validated separately through runtime regression tests.
 
 The project uses Lean 4.36.0 and its bundled standard library, with no external Lean dependencies.
 
@@ -33,14 +33,15 @@ Transcript ordering and card generation, semantic relevance, floating-point scor
 
 ## Relationship to production
 
-| Production area                                                      | Reference contract                                   |
-| -------------------------------------------------------------------- | ---------------------------------------------------- |
-| `packages/core/src/session/routing-engine.ts` scoring and selection  | `eligible`, `automatic`, `decide`                    |
-| `packages/schema/src/session-routing.ts` optional decision           | Explicit `Decision` variants                         |
-| `packages/tui/src/component/prompt/index.tsx` preview and submission | `freshPreview`, `submit`                             |
-| `packages/app/src/runtime/server/prompt-outbox.ts` retries           | `Delivery`, `delivery_sequence_preserves_submission` |
+| Production area                                                        | Reference contract                                   |
+| ---------------------------------------------------------------------- | ---------------------------------------------------- |
+| `packages/core/src/session/routing-policy.ts` decision policy          | `eligible`, `automatic`, `decide`                    |
+| `packages/schema/src/session-routing.ts` required decision             | Explicit `Decision` variants                         |
+| `packages/tui/src/component/prompt/routing-machine.ts` draft lifecycle | `freshPreview`, `submit`                             |
+| `packages/app/src/composer/routing-machine.ts` desktop draft lifecycle | `freshPreview`, `submit`                             |
+| `packages/app/src/runtime/server/prompt-outbox.ts` retries             | `Delivery`, `delivery_sequence_preserves_submission` |
 
-The current optional route result conflates a new chat, staying, and uncertainty. The TUI also uses a pending typing preview at send time and can ignore a manual current-chat choice. The reference policy makes the intended distinctions explicit; it is deliberately not presented as a proof of the existing code.
+The public API now distinguishes existing, current, new, and uncertain decisions. The TUI resolves a missing preview before sending, rejects stale results by revision, honors manual current/new choices, and opens the receiving chat. The desktop integration follows the same API and binds retry destinations to the captured payload. These integrations have runtime regression coverage; the Lean project does not prove their drivers or storage implementations.
 
 `compare.ts` compares the production policy with `Oracle.lean` over all combinations of relevance evidence, threshold acceptance, current chat, manual destination, and ambiguity for shortlists of up to two candidates. The two implementations share inputs, not decision logic. The real submission drivers need separate integration coverage. A stronger formal equivalence claim requires executing the verified core or proving an implementation refinement.
 
@@ -54,3 +55,17 @@ bun compare.ts
 ```
 
 `lean-toolchain` pins the compiler. `lake-manifest.json` records the empty dependency set. The `check-routing-proofs` GitHub workflow runs the same build when this project changes, using a pinned, checksum-verified official Lean release.
+
+## Evaluate routing quality
+
+From `packages/core`, run:
+
+```sh
+bun run routing:evaluate
+```
+
+The script runs the real card builder and routing engine on `test/fixtures/routing-corpus.json`. The 25 hand-labelled synthetic cases include unrelated requests, continuations, ambiguity, noncoding work, old context, files, paraphrases, multiple languages, and topic changes. Its JSON report lists exact failures, false continuations, unnecessary new chats, abstentions, and results per category. It is a diagnostic report, not a passing quality gate or an estimate of accuracy on real user traffic. The full-history retrieval integration tests separately cover more than 250 chats and evidence outside the latest 40 messages.
+
+The initial result is **22/25 correct**, with **one false continuation**, **two unnecessary new chats**, and **two correct abstentions**. The failures are a paraphrase without a lexical anchor, a Japanese request against English chat context, and shared planning vocabulary for a different city. These are limitations of evidence and ranking, outside the Lean decision-policy proof.
+
+The `session_routing` flag defaults off in release builds. This corpus does not justify enabling it by default or choosing a semantic model: the next relevance iteration needs broader human-labelled examples and a measured comparison of semantic selection against this lexical baseline, including wrong-chat rate, abstention, latency, and cost. The deterministic decision and delivery contracts remain in place regardless of the selector.
