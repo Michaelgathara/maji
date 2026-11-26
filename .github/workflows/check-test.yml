@@ -109,6 +109,10 @@ jobs:
         if: runner.os == 'Linux'
         run: bun run test:effect-simplification-rules
 
+      - name: Install search test dependency
+        if: runner.os == 'Linux' && github.repository != 'anomalyco/opencode'
+        run: sudo apt-get update && sudo apt-get install -y ripgrep
+
       - name: Check Effect simplifications
         if: runner.os == 'Linux'
         run: bun run lint:effect-simplifications
