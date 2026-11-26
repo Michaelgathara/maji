@@ -1,0 +1,41 @@
+name: check-routing-proofs
+
+on:
+  pull_request:
+    paths:
+      - "formal/routing/**"
+      - ".github/workflows/check-routing-proofs.yml"
+  push:
+    branches:
+      - dev
+      - beta
+    paths:
+      - "formal/routing/**"
+      - ".github/workflows/check-routing-proofs.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  routing-proofs:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Install pinned Lean toolchain
+        shell: bash
+        run: |
+          test "$(cat formal/routing/lean-toolchain)" = "leanprover/lean4:v4.36.0"
+          curl --fail --location --retry 3 \
+            --output "$RUNNER_TEMP/lean.tar.zst" \
+            https://github.com/leanprover/lean4/releases/download/v4.36.0/lean-4.36.0-linux.tar.zst
+          echo "2b7ab1ed8b92d2e6abfaf41344823b510064dbc9c0260cac73eb496ab2dea6eb  $RUNNER_TEMP/lean.tar.zst" | sha256sum --check
+          mkdir -p "$RUNNER_TEMP/lean"
+          tar --zstd -xf "$RUNNER_TEMP/lean.tar.zst" -C "$RUNNER_TEMP/lean" --strip-components=1
+          echo "$RUNNER_TEMP/lean/bin" >> "$GITHUB_PATH"
+
+      - name: Verify routing contract and audit theorem axioms
+        working-directory: formal/routing
+        run: lake --wfail build
