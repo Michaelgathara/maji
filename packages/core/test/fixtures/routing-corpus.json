@@ -1,0 +1,493 @@
+[
+  {
+    "name": "Unrelated travel from Home",
+    "category": "unrelated",
+    "prompt": "Help me plan a vacation in Kyoto",
+    "candidates": [
+      {
+        "id": "auth",
+        "title": "OAuth callback bug",
+        "text": "Fix the redirect URI for our OAuth callback."
+      }
+    ],
+    "expected": {
+      "type": "new"
+    }
+  },
+  {
+    "name": "Unrelated travel in busy code chat",
+    "category": "unrelated",
+    "prompt": "Help me plan a vacation in Kyoto",
+    "candidates": [
+      {
+        "id": "auth",
+        "title": "OAuth callback bug",
+        "text": "Fix the redirect URI for our OAuth callback.",
+        "busy": true
+      }
+    ],
+    "expected": {
+      "type": "new"
+    },
+    "current": "auth"
+  },
+  {
+    "name": "Recent same-directory chat is insufficient",
+    "category": "unrelated",
+    "prompt": "What is two plus two?",
+    "candidates": [
+      {
+        "id": "auth",
+        "title": "OAuth callback bug",
+        "text": "Fix the redirect URI for our OAuth callback."
+      }
+    ],
+    "expected": {
+      "type": "new"
+    }
+  },
+  {
+    "name": "Generic repair intent is insufficient",
+    "category": "unrelated",
+    "prompt": "Fix a kitchen cupboard hinge",
+    "candidates": [
+      {
+        "id": "auth",
+        "title": "OAuth callback bug",
+        "text": "Fix the redirect URI for our OAuth callback."
+      }
+    ],
+    "expected": {
+      "type": "new"
+    }
+  },
+  {
+    "name": "Old chat with literal topic",
+    "category": "old-history",
+    "prompt": "Compare Kyoto hotels",
+    "candidates": [
+      {
+        "id": "kyoto",
+        "title": "Kyoto hotels",
+        "text": "Compare hotels in Kyoto near the Shinkansen station.",
+        "updated": 1
+      },
+      {
+        "id": "auth",
+        "title": "OAuth callback bug",
+        "text": "Fix the redirect URI for our OAuth callback."
+      }
+    ],
+    "expected": {
+      "type": "existing",
+      "sessionID": "kyoto"
+    }
+  },
+  {
+    "name": "Approval stays in current chat",
+    "category": "continuation",
+    "prompt": "Yes, go ahead",
+    "candidates": [
+      {
+        "id": "auth",
+        "title": "OAuth callback bug",
+        "text": "Fix the redirect URI for our OAuth callback."
+      },
+      {
+        "id": "other",
+        "title": "Database migration",
+        "pendingInput": 1
+      }
+    ],
+    "expected": {
+      "type": "current",
+      "sessionID": "auth"
+    },
+    "current": "auth"
+  },
+  {
+    "name": "Explicit current continuation",
+    "category": "continuation",
+    "prompt": "Please continue",
+    "candidates": [
+      {
+        "id": "auth",
+        "title": "OAuth callback bug",
+        "text": "Fix the redirect URI for our OAuth callback."
+      },
+      {
+        "id": "kyoto",
+        "title": "Kyoto hotels",
+        "text": "Compare hotels in Kyoto near the Shinkansen station."
+      }
+    ],
+    "expected": {
+      "type": "current",
+      "sessionID": "auth"
+    },
+    "current": "auth"
+  },
+  {
+    "name": "One waiting chat at Home",
+    "category": "continuation",
+    "prompt": "Yes, go ahead",
+    "candidates": [
+      {
+        "id": "auth",
+        "title": "OAuth callback bug",
+        "text": "Fix the redirect URI for our OAuth callback.",
+        "pendingInput": 1
+      }
+    ],
+    "expected": {
+      "type": "existing",
+      "sessionID": "auth"
+    }
+  },
+  {
+    "name": "Several waiting chats at Home",
+    "category": "ambiguous",
+    "prompt": "Yes, go ahead",
+    "candidates": [
+      {
+        "id": "auth",
+        "title": "OAuth callback bug",
+        "text": "Fix the redirect URI for our OAuth callback.",
+        "pendingInput": 1
+      },
+      {
+        "id": "other",
+        "title": "Database migration",
+        "pendingInput": 1
+      }
+    ],
+    "expected": {
+      "type": "uncertain"
+    }
+  },
+  {
+    "name": "Same topic in two chats",
+    "category": "ambiguous",
+    "prompt": "Compare Kyoto hotels",
+    "candidates": [
+      {
+        "id": "kyoto",
+        "title": "Kyoto hotels",
+        "text": "Compare hotels in Kyoto near the Shinkansen station."
+      },
+      {
+        "id": "kyoto2",
+        "title": "Kyoto hotels",
+        "text": "Compare hotels in Kyoto near the Shinkansen station."
+      }
+    ],
+    "expected": {
+      "type": "uncertain"
+    }
+  },
+  {
+    "name": "Continue without an identified chat",
+    "category": "unrelated",
+    "prompt": "Continue",
+    "candidates": [
+      {
+        "id": "auth",
+        "title": "OAuth callback bug",
+        "text": "Fix the redirect URI for our OAuth callback."
+      },
+      {
+        "id": "kyoto",
+        "title": "Kyoto hotels",
+        "text": "Compare hotels in Kyoto near the Shinkansen station."
+      }
+    ],
+    "expected": {
+      "type": "new"
+    }
+  },
+  {
+    "name": "Resume current identified topic",
+    "category": "topic",
+    "prompt": "Can we revisit the OAuth callback bug?",
+    "candidates": [
+      {
+        "id": "auth",
+        "title": "OAuth callback bug",
+        "text": "Fix the redirect URI for our OAuth callback."
+      },
+      {
+        "id": "kyoto",
+        "title": "Kyoto hotels",
+        "text": "Compare hotels in Kyoto near the Shinkansen station."
+      }
+    ],
+    "expected": {
+      "type": "current",
+      "sessionID": "auth"
+    },
+    "current": "auth"
+  },
+  {
+    "name": "Switch from code to travel",
+    "category": "topic",
+    "prompt": "Compare Kyoto hotels",
+    "candidates": [
+      {
+        "id": "auth",
+        "title": "OAuth callback bug",
+        "text": "Fix the redirect URI for our OAuth callback."
+      },
+      {
+        "id": "kyoto",
+        "title": "Kyoto hotels",
+        "text": "Compare hotels in Kyoto near the Shinkansen station."
+      }
+    ],
+    "expected": {
+      "type": "existing",
+      "sessionID": "kyoto"
+    },
+    "current": "auth"
+  },
+  {
+    "name": "Wedding speech",
+    "category": "noncoding",
+    "prompt": "Help revise my wedding speech",
+    "candidates": [
+      {
+        "id": "speech",
+        "title": "Wedding speech",
+        "text": "A short toast for my sister and her partner."
+      },
+      {
+        "id": "auth",
+        "title": "OAuth callback bug",
+        "text": "Fix the redirect URI for our OAuth callback."
+      }
+    ],
+    "expected": {
+      "type": "existing",
+      "sessionID": "speech"
+    }
+  },
+  {
+    "name": "Vegetarian meal planning",
+    "category": "noncoding",
+    "prompt": "What can I cook for the vegetarian meal plan?",
+    "candidates": [
+      {
+        "id": "food",
+        "title": "Vegetarian meal plan"
+      },
+      {
+        "id": "auth",
+        "title": "OAuth callback bug",
+        "text": "Fix the redirect URI for our OAuth callback."
+      }
+    ],
+    "expected": {
+      "type": "existing",
+      "sessionID": "food"
+    }
+  },
+  {
+    "name": "Roof replacement budget",
+    "category": "noncoding",
+    "prompt": "Update the roof replacement budget",
+    "candidates": [
+      {
+        "id": "roof",
+        "title": "Roof replacement budget"
+      },
+      {
+        "id": "auth",
+        "title": "OAuth callback bug",
+        "text": "Fix the redirect URI for our OAuth callback."
+      }
+    ],
+    "expected": {
+      "type": "existing",
+      "sessionID": "roof"
+    }
+  },
+  {
+    "name": "Travel paraphrase with named anchor",
+    "category": "paraphrase",
+    "prompt": "Which Kyoto lodgings should we shortlist?",
+    "candidates": [
+      {
+        "id": "kyoto",
+        "title": "Kyoto hotels",
+        "text": "Compare hotels in Kyoto near the Shinkansen station."
+      },
+      {
+        "id": "auth",
+        "title": "OAuth callback bug",
+        "text": "Fix the redirect URI for our OAuth callback."
+      }
+    ],
+    "expected": {
+      "type": "existing",
+      "sessionID": "kyoto"
+    }
+  },
+  {
+    "name": "Semantic paraphrase without lexical anchor",
+    "category": "paraphrase",
+    "prompt": "Is there somewhere to sleep beside the bullet train stop?",
+    "candidates": [
+      {
+        "id": "kyoto",
+        "title": "Kyoto hotels",
+        "text": "Compare hotels in Kyoto near the Shinkansen station."
+      },
+      {
+        "id": "auth",
+        "title": "OAuth callback bug",
+        "text": "Fix the redirect URI for our OAuth callback."
+      }
+    ],
+    "expected": {
+      "type": "existing",
+      "sessionID": "kyoto"
+    }
+  },
+  {
+    "name": "Cross-language travel request",
+    "category": "multilingual",
+    "prompt": "京都のホテルを比較してください",
+    "candidates": [
+      {
+        "id": "kyoto",
+        "title": "Kyoto hotels",
+        "text": "Compare hotels in Kyoto near the Shinkansen station."
+      },
+      {
+        "id": "auth",
+        "title": "OAuth callback bug",
+        "text": "Fix the redirect URI for our OAuth callback."
+      }
+    ],
+    "expected": {
+      "type": "existing",
+      "sessionID": "kyoto"
+    }
+  },
+  {
+    "name": "Russian topic",
+    "category": "multilingual",
+    "prompt": "Ремонт велосипеда: какие тормоза выбрать?",
+    "candidates": [
+      {
+        "id": "bike",
+        "title": "Ремонт велосипеда"
+      },
+      {
+        "id": "auth",
+        "title": "OAuth callback bug",
+        "text": "Fix the redirect URI for our OAuth callback."
+      }
+    ],
+    "expected": {
+      "type": "existing",
+      "sessionID": "bike"
+    }
+  },
+  {
+    "name": "Japanese title anchor",
+    "category": "multilingual",
+    "prompt": "京都ホテルの候補を比較して",
+    "candidates": [
+      {
+        "id": "jp",
+        "title": "京都ホテル"
+      },
+      {
+        "id": "auth",
+        "title": "OAuth callback bug",
+        "text": "Fix the redirect URI for our OAuth callback."
+      }
+    ],
+    "expected": {
+      "type": "existing",
+      "sessionID": "jp"
+    }
+  },
+  {
+    "name": "Spanish title anchor",
+    "category": "multilingual",
+    "prompt": "Revisemos el menú vegetariano",
+    "candidates": [
+      {
+        "id": "es",
+        "title": "Menú vegetariano"
+      },
+      {
+        "id": "auth",
+        "title": "OAuth callback bug",
+        "text": "Fix the redirect URI for our OAuth callback."
+      }
+    ],
+    "expected": {
+      "type": "existing",
+      "sessionID": "es"
+    }
+  },
+  {
+    "name": "Referenced file in context",
+    "category": "file",
+    "prompt": "Fix packages/core/src/session/routing.ts",
+    "candidates": [
+      {
+        "id": "router",
+        "title": "Routing implementation",
+        "text": "Review packages/core/src/session/routing.ts"
+      },
+      {
+        "id": "kyoto",
+        "title": "Kyoto hotels",
+        "text": "Compare hotels in Kyoto near the Shinkansen station."
+      }
+    ],
+    "expected": {
+      "type": "existing",
+      "sessionID": "router"
+    }
+  },
+  {
+    "name": "Similar travel, different city",
+    "category": "scope-change",
+    "prompt": "Help book a hotel in Paris",
+    "candidates": [
+      {
+        "id": "kyoto",
+        "title": "Kyoto hotels",
+        "text": "Compare hotels in Kyoto near the Shinkansen station."
+      },
+      {
+        "id": "auth",
+        "title": "OAuth callback bug",
+        "text": "Fix the redirect URI for our OAuth callback."
+      }
+    ],
+    "expected": {
+      "type": "new"
+    },
+    "current": "kyoto"
+  },
+  {
+    "name": "Shared planning vocabulary, new city",
+    "category": "scope-change",
+    "prompt": "Plan a trip to Oslo",
+    "candidates": [
+      {
+        "id": "trip",
+        "title": "Plan a trip to Kyoto",
+        "text": "Choose temples and hotels for Kyoto."
+      }
+    ],
+    "expected": {
+      "type": "new"
+    }
+  }
+]
