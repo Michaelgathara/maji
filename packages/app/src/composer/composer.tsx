@@ -58,6 +58,21 @@ export function Composer(props: {
 
   return (
     <div class="flex flex-col gap-3">
+      <Show when={props.model.routing}>
+        {(routing) => (
+          <Show when={routing().visible()}>
+            <Button
+              variant="ghost"
+              size="small"
+              onClick={routing().choose}
+              disabled={props.model.view.submit.busy?.() || routing().locked()}
+              title={routing().locked() ? language.t("prompt.routing.pinned") : undefined}
+            >
+              {routing().title()}
+            </Button>
+          </Show>
+        )}
+      </Show>
       <ComposerEditor
         controller={props.model}
         borderUnderlay={props.borderUnderlay}

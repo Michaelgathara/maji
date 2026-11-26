@@ -284,10 +284,19 @@ export function createPromptOutbox(input: {
 function requestStatus(error: unknown): number | undefined {
   const failure = Option.getOrUndefined(Schema.decodeUnknownOption(TransportFailure)(error))
 
+  if (failure?._tag === "InvalidRequestError") return 400
+
+  if (failure?._tag === "UnauthorizedError") return 401
+
+  if (failure?._tag === "SessionNotFoundError") return 404
+
+  if (failure?._tag === "ConflictError") return 409
+
   return failure?.status ?? (failure?.cause === undefined ? undefined : requestStatus(failure.cause))
 }
 
 const TransportFailure = Schema.Struct({
+  _tag: Schema.optionalKey(Schema.String),
   status: Schema.optionalKey(Schema.Number),
   cause: Schema.optionalKey(Schema.Unknown),
 })

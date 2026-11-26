@@ -1,5 +1,10 @@
 import type { Page } from "@playwright/test"
-import type { OpenCodeEvent, SessionMessageInfo } from "@opencode/client/promise"
+import type {
+  OpenCodeEvent,
+  SessionMessageInfo,
+  ExperimentalSessionRouteInput,
+  ExperimentalSessionRouteOutput,
+} from "@opencode/client/promise"
 import { Permission } from "@opencode/schema/permission"
 import { artifactKind, artifactMime } from "@opencode/util/artifact"
 import { Model } from "@opencode/schema/model"
@@ -19,6 +24,7 @@ import {
   MockShellNotFound,
   MockUnauthorized,
   MockUnsupported,
+  RoutingInput,
 } from "./mock-api"
 import { createPersistentPty, type MockPersistentPtyConfig, type MockServerEvent } from "./persistent-pty"
 import { installSseTransport } from "./sse-transport"
@@ -47,6 +53,9 @@ export type MockFileContent =
   | undefined
 
 export interface MockServerConfig {
+  onRoute?: (
+    input: ExperimentalSessionRouteInput,
+  ) => ExperimentalSessionRouteOutput | MockAnswer | Promise<ExperimentalSessionRouteOutput | MockAnswer>
   server?: string
   // The machine name `/api/info` reports; omitted like a server that predates it.
   hostname?: string
@@ -677,6 +686,25 @@ function mockHandlers(
 
   return HttpApiBuilder.group(MockApi, "mock", (handlers) =>
     handlers
+      .handleRaw("sessionRoute", (ctx) =>
+        Effect.gen(function* () {
+          const input = yield* ctx.request.json.pipe(
+            Effect.flatMap(Schema.decodeUnknownEffect(RoutingInput)),
+            Effect.orDie,
+          )
+
+          const answer = (yield* Effect.promise(() => Promise.resolve(config.onRoute?.(input)))) ?? {
+            decision: input.currentSessionID
+              ? { type: "current" as const, sessionID: input.currentSessionID }
+              : { type: "new" as const },
+            candidates: [],
+          }
+
+          return "status" in answer
+            ? HttpServerResponse.jsonUnsafe(answer.body, { status: answer.status })
+            : HttpServerResponse.jsonUnsafe({ data: answer })
+        }),
+      )
       .handleRaw("event", () => {
         const events = config.events?.()
         const retry = config.eventRetry === undefined ? "" : `retry: ${config.eventRetry}\n\n`
