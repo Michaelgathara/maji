@@ -218,6 +218,7 @@ export function buildRoutingCard(input: {
     ...(!looksLikeDefaultTitle(input.title) ? [{ text: input.title, weight: 4.2 }] : []),
     ...transcript.user.map((text, index, source) => ({ text, weight: index === source.length - 1 ? 3.2 : 2.4 })),
     ...transcript.assistant.map((text, index, source) => ({ text, weight: index === source.length - 1 ? 2.2 : 1.6 })),
+    ...transcript.context.map((text) => ({ text, weight: 2 })),
     ...transcript.tools.map((text) => ({ text, weight: 1.2 })),
     ...transcript.files.map((text) => ({ text, weight: 1.8 })),
   ]
@@ -231,11 +232,10 @@ export function buildRoutingCard(input: {
   const taskType = inferTaskType(intents, weightedSegments.map((segment) => segment.text).join("\n"))
   const canonicalTopic = topics[0]
   const files = dedupePreserve(transcript.files.map((item) => item.trim()).filter(Boolean)).slice(0, 12)
-  const statusHint =
-    input.pendingInput > 0 ? "needs-input" : input.busy ? "active" : lastAssistantReply ? "done" : "idle"
+  const statusHint = input.pendingInput > 0 ? "needs-input" : input.busy ? "active" : "idle"
   const currentStatus = describeStatus(statusHint, lastAssistantReply)
   const outcome = inferOutcome(lastAssistantReply)
-  const openQuestions = inferOpenQuestions([...transcript.user, ...transcript.assistant]).slice(0, 3)
+  const openQuestions = inferOpenQuestions(lastAssistantReply ? [lastAssistantReply] : []).slice(0, 3)
   const summary = summarizeSession({
     title: input.title,
     canonicalTopic,
@@ -417,6 +417,7 @@ function inferTaskType(intents: string[], input: string) {
 function collectTranscript(messages: readonly RoutingMessage[]) {
   const user: string[] = []
   const assistant: string[] = []
+  const context: string[] = []
   const tools: string[] = []
   const files: string[] = []
   const all: string[] = []
@@ -427,8 +428,14 @@ function collectTranscript(messages: readonly RoutingMessage[]) {
     const text = visible.join("\n").trim()
     if (!text) continue
     all.push(text)
-    if (message.role === "user") user.push(text)
-    else assistant.push(text)
+    const spoken = message.parts
+      .filter((part) => part.type === "text" && !part.synthetic && !part.ignored)
+      .map((part) => part.text ?? "")
+      .join("\n")
+      .trim()
+    if (message.role === "user" && spoken) user.push(spoken)
+    if (message.role === "assistant" && spoken) assistant.push(spoken)
+    if (message.role === "context") context.push(text)
     for (const part of message.parts) {
       const detail = extractPartDetail(part)
       if (detail.tool) tools.push(detail.tool)
@@ -436,7 +443,7 @@ function collectTranscript(messages: readonly RoutingMessage[]) {
     }
   }
 
-  return { user, assistant, tools, files, all }
+  return { user, assistant, context, tools, files, all }
 }
 
 function extractPartText(part: RoutingPart) {
@@ -548,7 +555,7 @@ function inferOutcome(lastAssistantReply: string | undefined) {
   const outcome = sentences.find((sentence) =>
     /\b(done|finished|completed|fixed|passed|failed|found|result|summary|verified|blocked)\b/i.test(sentence),
   )
-  return truncateText(outcome ?? sentences.at(-1) ?? clean, 180)
+  return truncateText(outcome, 180)
 }
 
 function inferOpenQuestions(messages: string[]) {
