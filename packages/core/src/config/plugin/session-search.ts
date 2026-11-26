@@ -11,7 +11,9 @@ export const Plugin = define({
   effect: Effect.fn(function* (ctx) {
     const build = yield* SessionSearchBuild.Service
     const flags = yield* Flag.Service
-    const apply = flags.enabled("sqlite_fts").pipe(Effect.flatMap((on) => (on ? build.start : Effect.void)))
+    const apply = Effect.all([flags.enabled("sqlite_fts"), flags.enabled("session_routing")]).pipe(
+      Effect.flatMap((enabled) => (enabled.some(Boolean) ? build.start : Effect.void)),
+    )
     yield* ctx.event.subscribe({ types: ["config.updated"] }).pipe(
       Stream.runForEach(() => apply),
       Effect.forkScoped({ startImmediately: true }),

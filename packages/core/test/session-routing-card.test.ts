@@ -3,6 +3,23 @@ import { Schema } from "effect"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { RoutingCard } from "../src/session/routing-card"
 
+test("a user reply clears the preceding assistant question from open questions", () => {
+  const messages = Schema.decodeUnknownSync(Schema.Array(SessionMessage.Info))([
+    { id: "msg_answer", type: "user", text: "Use the station hotel", time: { created: 2 } },
+    {
+      id: "msg_question",
+      type: "assistant",
+      agent: "build",
+      model: { providerID: "test", id: "test" },
+      time: { created: 1 },
+      content: [{ type: "text", text: "Which hotel should we book?" }],
+    },
+  ])
+  expect(
+    RoutingCard.fromMessages({ title: "Kyoto hotels", messages, pendingInput: 0, busy: false }).openQuestions,
+  ).toEqual([])
+})
+
 test("stored newest-first history produces the latest request and reply with structured file context", () => {
   const messages = Schema.decodeUnknownSync(Schema.Array(SessionMessage.Info))([
     {

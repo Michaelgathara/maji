@@ -1,6 +1,10 @@
 import { Instance } from "@opencode/core/instance/service"
 import { Session } from "@opencode/core/session"
 import { SessionRouting } from "@opencode/core/session/routing"
+import { Flag } from "@opencode/core/flag"
+import { Location } from "@opencode/core/location"
+import { LocationServiceMap } from "@opencode/core/location-service-map"
+import { SessionSearchBuild } from "@opencode/core/session/search-build"
 import { SessionStats } from "@opencode/core/session/stats"
 import { SessionTitle } from "@opencode/core/session/title"
 import { SessionTransfer } from "@opencode/core/session/transfer"
@@ -42,6 +46,8 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
     const transfer = yield* SessionTransfer.Service
     const instructions = yield* InstructionEntry.Service
     const instances = yield* Instance.Service
+    const locations = yield* LocationServiceMap.Service
+    const searchBuild = yield* SessionSearchBuild.Service
     const requireSession = (sessionID: Session.ID) =>
       session.get(sessionID).pipe(Effect.catchTag("Session.NotFoundError", missingSession))
     const requireOwnedForm = Effect.fnUntraced(function* (sessionID: Form.Info["sessionID"], formID: Form.ID) {
@@ -103,7 +109,34 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.route",
         Effect.fn(function* (ctx) {
-          return { data: yield* routing.route(ctx.payload) }
+          const current = ctx.payload.currentSessionID ? yield* requireSession(ctx.payload.currentSessionID) : undefined
+          const enabled = yield* Flag.enabled("session_routing").pipe(
+            Effect.provide(
+              locations.get(
+                Location.Ref.make({
+                  directory: AbsolutePath.make(ctx.payload.directory ?? current?.location.directory ?? process.cwd()),
+                }),
+              ),
+            ),
+            locationErrors,
+          )
+          if (!enabled)
+            return {
+              data: {
+                decision: current ? { type: "current" as const, sessionID: current.id } : { type: "new" as const },
+                candidates: [],
+              },
+            }
+          yield* searchBuild.start
+          return {
+            data: yield* routing
+              .route(ctx.payload)
+              .pipe(
+                Effect.mapError(
+                  (error) => new ServiceUnavailableError({ message: error.message, service: "conversation routing" }),
+                ),
+              ),
+          }
         }),
       )
       .handle(

@@ -172,6 +172,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           directory: Schema.String.pipe(Schema.optional),
         }),
         success: Schema.Struct({ data: SessionRouting.RouteResult }),
+        error: [ServiceUnavailableError, SessionNotFoundError, LocationNotFoundError],
       }).annotateMerge(
         OpenApi.annotations({
           identifier: "experimental.session.route",

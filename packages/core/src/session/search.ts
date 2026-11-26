@@ -1,6 +1,6 @@
 export * as SessionSearch from "./search.js"
 
-import { and, asc, desc, eq, gt, inArray, isNull, lt, sql, type SQL } from "drizzle-orm"
+import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, lt, sql, type SQL } from "drizzle-orm"
 import { Context, DateTime, Effect, Layer, Schema } from "effect"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { optional } from "@opencode/schema/schema"
@@ -130,6 +130,7 @@ export interface SearchInput {
   readonly sessionID?: Session.ID
   readonly directory?: string
   readonly subagents?: boolean
+  readonly archived?: boolean
   readonly limit?: number
   readonly offset?: number
 }
@@ -185,6 +186,7 @@ const listSessions = Effect.fnUntraced(function* (
     projectID: input.sessionID ? undefined : input.projectID,
     directory: input.directory,
     subagents: input.sessionID ? true : (input.subagents ?? false),
+    archived: input.archived,
   })
   const rows = yield* db
     .select()
@@ -216,6 +218,7 @@ const searchSessions = Effect.fnUntraced(function* (
     projectID: input.sessionID ? undefined : input.projectID,
     directory: input.directory,
     subagents: input.sessionID ? true : (input.subagents ?? true),
+    archived: input.archived,
   })
   const runMatch = (expression: string) =>
     db.all<{ source_id: string; session_id: string; score: number }>(sql`
@@ -274,7 +277,9 @@ const searchSessions = Effect.fnUntraced(function* (
     .where(inArray(SessionMessageTable.id, messageIDs))
     .all()
     .pipe(Effect.orDie)
-  const messageMap = new Map((yield* decodeWindowRows(db, messageRows)).map((decoded) => [decoded.row.id, decoded] as const))
+  const messageMap = new Map(
+    (yield* decodeWindowRows(db, messageRows)).map((decoded) => [decoded.row.id, decoded] as const),
+  )
 
   const results: SearchResult[] = []
   for (const [sessionID, sources] of grouped) {
@@ -446,7 +451,12 @@ function formatMessage(
     time: formatTime(row.time_created),
   }
 
-  if (message.type === "user" || message.type === "synthetic" || message.type === "system" || message.type === "skill") {
+  if (
+    message.type === "user" ||
+    message.type === "synthetic" ||
+    message.type === "system" ||
+    message.type === "skill"
+  ) {
     const text = nonEmpty(message.text)
     if (text !== undefined) base.text = text
     return base
@@ -475,9 +485,7 @@ function formatMessage(
       .join("\n\n")
     const text = nonEmpty(joined)
     if (text !== undefined) base.text = text
-    const calls = message.content.flatMap((part) =>
-      part.type === "tool" ? [formatCall(part, full)] : [],
-    )
+    const calls = message.content.flatMap((part) => (part.type === "tool" ? [formatCall(part, full)] : []))
     if (calls.length > 0) base.calls = calls
     return base
   }
@@ -516,9 +524,7 @@ function formatCall(part: SessionMessage.AssistantTool, full: boolean): string |
 }
 
 function toolContentText(content: ReadonlyArray<Tool.Content>) {
-  return content
-    .map((item) => (item.type === "text" ? item.text : `[file: ${item.name ?? item.mime}]`))
-    .join("\n")
+  return content.map((item) => (item.type === "text" ? item.text : `[file: ${item.name ?? item.mime}]`)).join("\n")
 }
 
 function extractIndexedText(message: SessionMessage.MediaInfo) {
@@ -527,7 +533,9 @@ function extractIndexedText(message: SessionMessage.MediaInfo) {
     return message.summary.slice(0, SessionSearchIndex.MaxText)
   if (message.type === "assistant")
     return message.content
-      .flatMap((part) => (part.type === "text" && part.text.trim() ? [part.text.slice(0, SessionSearchIndex.MaxText)] : []))
+      .flatMap((part) =>
+        part.type === "text" && part.text.trim() ? [part.text.slice(0, SessionSearchIndex.MaxText)] : [],
+      )
       .join("\n\n")
       .slice(0, SessionSearchIndex.MaxText)
   return ""
@@ -561,6 +569,7 @@ function sessionConditions(input: {
   readonly projectID?: Project.ID
   readonly directory?: string
   readonly subagents: boolean
+  readonly archived?: boolean
 }) {
   const conditions: SQL[] = []
   if (input.sessionID) conditions.push(eq(SessionTable.id, input.sessionID))
@@ -571,6 +580,8 @@ function sessionConditions(input: {
     conditions.push(sql`(${SessionTable.directory} = ${dir} OR ${SessionTable.directory} LIKE ${prefix} ESCAPE '\\')`)
   }
   if (!input.subagents) conditions.push(isNull(SessionTable.parent_id))
+  if (input.archived !== undefined)
+    conditions.push(input.archived ? isNotNull(SessionTable.time_archived) : isNull(SessionTable.time_archived))
   return conditions
 }
 
@@ -588,13 +599,11 @@ function hasFtsSyntax(query: string) {
 }
 
 function plainOrQuery(folded: string) {
-  const terms = folded
-    .split(/\s+/)
-    .flatMap((raw) => {
-      const cleaned = raw.replaceAll('"', "")
-      if (!/[\p{L}\p{N}]/u.test(cleaned)) return []
-      return [`"${cleaned}"`]
-    })
+  const terms = folded.split(/\s+/).flatMap((raw) => {
+    const cleaned = raw.replaceAll('"', "")
+    if (!/[\p{L}\p{N}]/u.test(cleaned)) return []
+    return [`"${cleaned}"`]
+  })
   return terms.length > 0 ? terms.join(" OR ") : undefined
 }
 
@@ -614,11 +623,7 @@ function makeSnippet(text: string, query: string) {
 
   const exact = terms.map((term) => normalized.indexOf(term)).find((at) => at >= 0)
   const stemmed =
-    exact !== undefined
-      ? exact
-      : terms
-          .map((term) => normalized.indexOf(stemPrefix(term)))
-          .find((at) => at >= 0)
+    exact !== undefined ? exact : terms.map((term) => normalized.indexOf(stemPrefix(term))).find((at) => at >= 0)
   const origin = stemmed !== undefined ? (offsets[stemmed] ?? 0) : 0
   const start = Math.max(0, origin - SNIPPET_CONTEXT)
   const end = Math.min(text.length, origin + SNIPPET_CONTEXT)

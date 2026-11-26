@@ -2665,6 +2665,7 @@ export type ConfigEntry =
           portable_shell_scanner?: boolean
           codemode_vm?: boolean
           all_flags?: boolean
+          session_routing?: boolean
           todo?: boolean
           media_blob?: boolean
           automations?: boolean

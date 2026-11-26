@@ -25,6 +25,7 @@ export type RouteCandidate = {
   pendingInput: number
   busy: boolean
   card?: SessionRouting.Card
+  history?: string
 }
 
 export type RouteScore = {
@@ -82,7 +83,7 @@ export function routePrompt(input: {
       const questionTokens = tokenize(normalize((card?.openQuestions ?? []).join(" ")))
       const topicPaths = extractPaths((card?.files ?? []).join(" "))
       const sessionIntents = new Set(card?.intents ?? [])
-      const context = normalize(card?.text ?? "")
+      const context = normalize([card?.text, candidate.history].filter(Boolean).join("\n"))
       const contextTokens = tokenize(context)
       const contextPaths = extractPaths(context)
       const pendingInput = candidate.pendingInput
@@ -234,8 +235,14 @@ export function buildRoutingCard(input: {
   const files = dedupePreserve(transcript.files.map((item) => item.trim()).filter(Boolean)).slice(0, 12)
   const statusHint = input.pendingInput > 0 ? "needs-input" : input.busy ? "active" : "idle"
   const currentStatus = describeStatus(statusHint, lastAssistantReply)
-  const outcome = inferOutcome(lastAssistantReply)
-  const openQuestions = inferOpenQuestions(lastAssistantReply ? [lastAssistantReply] : []).slice(0, 3)
+  const lastSpoken = input.messages.findLast(
+    (message) =>
+      (message.role === "user" || message.role === "assistant") &&
+      message.parts.some((part) => part.type === "text" && part.text?.trim() && !part.synthetic && !part.ignored),
+  )?.role
+  const outcome = lastSpoken === "assistant" ? inferOutcome(lastAssistantReply) : undefined
+  const openQuestions =
+    lastSpoken === "assistant" && lastAssistantReply ? inferOpenQuestions([lastAssistantReply]).slice(0, 3) : []
   const summary = summarizeSession({
     title: input.title,
     canonicalTopic,
@@ -284,10 +291,15 @@ export function buildRoutingCard(input: {
 
 function normalize(input: string) {
   return input
+    .normalize("NFKC")
     .toLowerCase()
-    .replace(/[^a-z0-9_\-./\s]/g, " ")
+    .replace(/[^\p{L}\p{N}_\-./\s]/gu, " ")
     .replace(/\s+/g, " ")
     .trim()
+}
+
+export function routingTerms(input: string) {
+  return [...tokenize(normalize(input))]
 }
 
 function tokenize(input: string) {

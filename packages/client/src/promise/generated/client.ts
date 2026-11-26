@@ -1090,7 +1090,7 @@ export function make(options: ClientOptions) {
               path: `/api/experimental/session/route`,
               body: { text: input["text"], currentSessionID: input["currentSessionID"], directory: input["directory"] },
               successStatus: 200,
-              declaredStatuses: [400, 401],
+              declaredStatuses: [400, 401, 404, 503],
               empty: false,
             },
             requestOptions,
