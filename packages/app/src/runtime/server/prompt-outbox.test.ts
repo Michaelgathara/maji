@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionInboxUser } from "@opencode/client/promise"
+import type { Data } from "@opencode/client/solid"
 import { createRoot } from "solid-js"
 import { createPromptOutbox, type PromptOutboxEntry } from "./prompt-outbox"
 import { ServerScope } from "./scope"
@@ -19,6 +20,7 @@ function receipt(id: string): SessionInboxUser {
 
 function storage() {
   const values = new Map<string, PromptOutboxEntry>()
+
   return {
     values,
     driver: {
@@ -33,10 +35,10 @@ function storage() {
   }
 }
 
-function data(send: (id: string) => Promise<SessionInboxUser>) {
+function data(send: (id: string, input: Parameters<Data["session"]["prompt"]>[0]) => Promise<SessionInboxUser>) {
   return {
     session: {
-      prompt: (input: { id?: string | null | undefined }) => send(input.id ?? "missing"),
+      prompt: (input: Parameters<Data["session"]["prompt"]>[0]) => send(input.id ?? "missing", input),
       sync: async () => undefined,
       get: () => undefined,
     },
@@ -54,13 +56,113 @@ const sdk = {
 }
 
 describe("prompt outbox", () => {
+  test("initial delivery and background flush share one lane and preserve the chosen destination", async () => {
+    const saved = storage()
+    const gate = Promise.withResolvers<void>()
+    const started = Promise.withResolvers<void>()
+    const calls: { id: string; sessionID: string }[] = []
+
+    const source = data(async (id, input) => {
+      calls.push({ id, sessionID: input.sessionID })
+      started.resolve()
+      await input.gate
+
+      return receipt(id)
+    })
+
+    using owner = createRoot((dispose) => ({
+      outbox: createPromptOutbox({ scope, sdk, data: source, storage: saved.driver }),
+      [Symbol.dispose]: dispose,
+    }))
+
+    const sending = owner.outbox.prompt({ sessionID: "ses_chosen", id: "msg_1", text: "hello", gate: gate.promise })
+    await started.promise
+    const flushing = owner.outbox.flush()
+    expect(calls).toEqual([{ id: "msg_1", sessionID: "ses_chosen" }])
+    gate.resolve()
+    await Promise.all([sending, flushing])
+    expect(calls).toEqual([{ id: "msg_1", sessionID: "ses_chosen" }])
+    expect(saved.values.size).toBe(0)
+  })
+
+  test("later prompts wait behind an uncertain earlier admission", async () => {
+    const saved = storage()
+    const calls: string[] = []
+    let offline = true
+
+    const source = data(async (id) => {
+      calls.push(id)
+
+      if (offline) throw new Error("offline")
+
+      return receipt(id)
+    })
+
+    using owner = createRoot((dispose) => ({
+      outbox: createPromptOutbox({ scope, sdk, data: source, storage: saved.driver }),
+      [Symbol.dispose]: dispose,
+    }))
+
+    await owner.outbox.prompt({ sessionID: "ses_1", id: "msg_z", text: "first" })
+    await owner.outbox.prompt({ sessionID: "ses_1", id: "msg_a", text: "second" })
+    expect(calls).toEqual(["msg_z", "msg_z"])
+    expect(saved.values.size).toBe(2)
+    offline = false
+    await owner.outbox.flush()
+    expect(calls).toEqual(["msg_z", "msg_z", "msg_z", "msg_a"])
+    expect(saved.values.size).toBe(0)
+  })
+
+  test("retry retains the original preparation and rejects a changed destination", async () => {
+    const saved = storage()
+    const calls: string[] = []
+    let offline = true
+    let prepared = 0
+
+    const source = data(async (id, input) => {
+      await input.gate
+      await input.prepare?.()
+      calls.push(input.sessionID)
+
+      if (offline) throw new Error("offline")
+
+      return receipt(id)
+    })
+
+    using owner = createRoot((dispose) => ({
+      outbox: createPromptOutbox({ scope, sdk, data: source, storage: saved.driver }),
+      [Symbol.dispose]: dispose,
+    }))
+
+    await owner.outbox.prompt({
+      sessionID: "ses_chosen",
+      id: "msg_1",
+      text: "hello",
+      gate: Promise.resolve(),
+      prepare: async () => {
+        prepared++
+      },
+    })
+    await expect(owner.outbox.prompt({ sessionID: "ses_other", id: "msg_1", text: "hello" })).rejects.toThrow(
+      "Conflicting prompt retry",
+    )
+    offline = false
+    await owner.outbox.flush()
+    expect(calls).toEqual(["ses_chosen", "ses_chosen"])
+    expect(prepared).toBe(2)
+    expect(saved.values.size).toBe(0)
+  })
+
   test("keeps an uncertain admission and retries the same ID", async () => {
     const saved = storage()
     const calls: string[] = []
     let fail = true
+
     const source = data(async (id) => {
       calls.push(id)
+
       if (fail) throw new Error("offline")
+
       return receipt(id)
     })
 
