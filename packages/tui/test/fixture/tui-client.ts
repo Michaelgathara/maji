@@ -1,4 +1,5 @@
 import { OpenCode, type OpenCodeEvent } from "@opencode/client"
+import { Schema } from "effect"
 
 export const worktree = "/tmp/opencode"
 export const directory = `${worktree}/packages/tui`
@@ -75,6 +76,21 @@ export function createFetch(override?: FetchHandler, events?: ReturnType<typeof 
     const overridden = await override?.(url, request)
     if (overridden) return overridden
     if (url.pathname === "/api/event" && events) return events.v2()
+
+    if (url.pathname === "/api/experimental/session/route") {
+      const input = Schema.decodeUnknownSync(
+        Schema.Struct({
+          text: Schema.String,
+          currentSessionID: Schema.optionalKey(Schema.String),
+        }),
+      )(await request.json())
+      return json({
+        data: {
+          decision: input.currentSessionID ? { type: "current", sessionID: input.currentSessionID } : { type: "new" },
+          candidates: [],
+        },
+      })
+    }
 
     if (
       [
