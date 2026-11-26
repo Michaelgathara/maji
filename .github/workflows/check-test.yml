@@ -51,7 +51,7 @@ jobs:
   affected:
     name: affected packages
     if: ${{ !github.event.pull_request.draft && github.event_name != 'pull_request' }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ${{ github.repository == 'anomalyco/opencode' && 'blacksmith-4vcpu-ubuntu-2404' || 'ubuntu-24.04' }}
     outputs:
       e2e: ${{ steps.packages.outputs.app }}
     steps:
@@ -85,7 +85,7 @@ jobs:
       matrix:
         # Pull requests run Linux only; Windows runs the same tests on pushes, nightly runs and the release gate.
         settings: ${{ fromJSON(github.event_name == 'pull_request' && '[{"name":"linux","host":"blacksmith-4vcpu-ubuntu-2404"}]' || '[{"name":"linux","host":"blacksmith-4vcpu-ubuntu-2404"},{"name":"windows","host":"blacksmith-4vcpu-windows-2025"}]') }}
-    runs-on: ${{ matrix.settings.host }}
+    runs-on: ${{ github.repository == 'anomalyco/opencode' && matrix.settings.host || (matrix.settings.name == 'windows' && 'windows-2025' || 'ubuntu-24.04') }}
     defaults:
       run:
         shell: bash
@@ -167,7 +167,7 @@ jobs:
             host: blacksmith-4vcpu-ubuntu-2404
           - name: windows
             host: blacksmith-4vcpu-windows-2025
-    runs-on: ${{ matrix.settings.host }}
+    runs-on: ${{ github.repository == 'anomalyco/opencode' && matrix.settings.host || (matrix.settings.name == 'windows' && 'windows-2025' || 'ubuntu-24.04') }}
     defaults:
       run:
         shell: bash
@@ -243,7 +243,7 @@ jobs:
             shard: 2/2
           - id: session-ui-components
           - id: app-components
-    runs-on: ${{ matrix.settings.host }}
+    runs-on: ${{ github.repository == 'anomalyco/opencode' && matrix.settings.host || (matrix.settings.name == 'windows' && 'windows-2025' || 'ubuntu-24.04') }}
     env:
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.playwright-browsers
       # Beta only (packages/app/e2e/QUARANTINE.md): gate legs skip quarantined tests, retry once and stop after 8

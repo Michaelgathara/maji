@@ -72,6 +72,8 @@ test("exposes every standard HTTP API group", () => {
   expect(Object.keys(client.experimental.job)).toEqual(["list", "cancel"])
   expect(Object.keys(client.experimental.session)).toEqual([
     "stats",
+    "route",
+    "routing",
     "import",
     "export",
     "skill",
