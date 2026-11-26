@@ -558,9 +558,11 @@ export type ExperimentalSessionRouteInput = {
   readonly directory?: string | undefined
 }
 export type ExperimentalSessionRouteOutput = {
-  readonly decision?:
-    | { readonly sessionID: Session.ID; readonly title: string; readonly score: number; readonly reason: string }
-    | undefined
+  readonly decision:
+    | { readonly type: "existing"; readonly sessionID: Session.ID }
+    | { readonly type: "current"; readonly sessionID: Session.ID }
+    | { readonly type: "new" }
+    | { readonly type: "uncertain" }
   readonly candidates: ReadonlyArray<{
     readonly sessionID: Session.ID
     readonly title: string

@@ -1,6 +1,6 @@
 # Maji routing contract
 
-Status: **machine-checked reference specification**. This project defines the intended decision and submission policy. It does not execute in Maji, and it does not prove that the current TypeScript implementation conforms. Existing runtime routing bugs remain until the implementation is connected to this contract.
+Status: **machine-checked reference specification with production decision-policy conformance tests**. The pure TypeScript policy in `packages/core/src/session/routing-policy.ts` is compared with an executable Lean oracle over 2,920 cases. This is conformance evidence, not a formal equivalence proof. Preview, submission, and delivery integration still need their own runtime coverage.
 
 The project uses Lean 4.36.0 and its bundled standard library, with no external Lean dependencies.
 
@@ -42,7 +42,7 @@ Transcript ordering and card generation, semantic relevance, floating-point scor
 
 The current optional route result conflates a new chat, staying, and uncertainty. The TUI also uses a pending typing preview at send time and can ignore a manual current-chat choice. The reference policy makes the intended distinctions explicit; it is deliberately not presented as a proof of the existing code.
 
-Production conformance needs its own evidence. A practical next step is to extract a pure TypeScript policy using this same input contract and compare it with an executable Lean oracle over shared inputs, then test the real submission drivers. Those comparisons are conformance tests, not a formal equivalence proof. A stronger claim requires executing the verified core or proving an implementation refinement.
+`compare.ts` compares the production policy with `Oracle.lean` over all combinations of relevance evidence, threshold acceptance, current chat, manual destination, and ambiguity for shortlists of up to two candidates. The two implementations share inputs, not decision logic. The real submission drivers need separate integration coverage. A stronger formal equivalence claim requires executing the verified core or proving an implementation refinement.
 
 ## Check the proofs
 
@@ -50,6 +50,7 @@ Install Lean through [Elan](https://lean-lang.org/install/), then run from this 
 
 ```sh
 lake --wfail build
+bun compare.ts
 ```
 
 `lean-toolchain` pins the compiler. `lake-manifest.json` records the empty dependency set. The `check-routing-proofs` GitHub workflow runs the same build when this project changes, using a pinned, checksum-verified official Lean release.

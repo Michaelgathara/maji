@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - "formal/routing/**"
+      - "packages/core/src/session/routing-policy.ts"
       - ".github/workflows/check-routing-proofs.yml"
   push:
     branches:
@@ -11,6 +12,7 @@ on:
       - beta
     paths:
       - "formal/routing/**"
+      - "packages/core/src/session/routing-policy.ts"
       - ".github/workflows/check-routing-proofs.yml"
   workflow_dispatch:
 
@@ -39,3 +41,12 @@ jobs:
       - name: Verify routing contract and audit theorem axioms
         working-directory: formal/routing
         run: lake --wfail build
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: package.json
+
+      - name: Compare production policy with Lean
+        working-directory: formal/routing
+        run: bun compare.ts

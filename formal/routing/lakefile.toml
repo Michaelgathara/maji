@@ -1,6 +1,6 @@
 name = "maji-routing"
 version = "0.1.0"
-defaultTargets = ["Routing", "Examples", "Audit"]
+defaultTargets = ["Routing", "Examples", "Audit", "Oracle"]
 moreLeanArgs = ["-DwarningAsError=true"]
 
 [[lean_lib]]
@@ -11,3 +11,6 @@ name = "Examples"
 
 [[lean_lib]]
 name = "Audit"
+
+[[lean_lib]]
+name = "Oracle"

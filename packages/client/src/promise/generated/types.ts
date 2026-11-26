@@ -437,6 +437,12 @@ export type PermissionRule = { action: string; resource: string; effect: Permiss
 
 export type PluginInfo = { id?: PluginID; source: PluginSource; features: PluginFeatures; state: PluginState }
 
+export type SessionRoutingDecision =
+  | { type: "existing"; sessionID: SessionID }
+  | { type: "current"; sessionID: SessionID }
+  | { type: "new" }
+  | { type: "uncertain" }
+
 export type SessionRouteCandidate = { sessionID: SessionID; title: string; score: number; reason: string }
 
 export type AutomationTarget = { session: SessionID; subagent?: never } | { subagent: AgentID; session?: never }
@@ -1154,10 +1160,7 @@ export type ModelVariant = {
 
 export type PermissionRuleset = Array<PermissionRule>
 
-export type SessionRouteResult = {
-  decision?: SessionRouteCandidate | undefined
-  candidates: Array<SessionRouteCandidate>
-}
+export type SessionRouteResult = { decision: SessionRoutingDecision; candidates: Array<SessionRouteCandidate> }
 
 export type AutomationActionPrompt = { type: "prompt"; prompt: string; to: AutomationTarget }
 

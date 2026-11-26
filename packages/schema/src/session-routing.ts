@@ -39,8 +39,16 @@ export const Candidate = Schema.Struct({
 }).annotate({ identifier: "SessionRouteCandidate" })
 export interface Candidate extends Schema.Schema.Type<typeof Candidate> {}
 
+export const Decision = Schema.Union([
+  Schema.Struct({ type: Schema.Literal("existing"), sessionID: SessionID }),
+  Schema.Struct({ type: Schema.Literal("current"), sessionID: SessionID }),
+  Schema.Struct({ type: Schema.Literal("new") }),
+  Schema.Struct({ type: Schema.Literal("uncertain") }),
+]).annotate({ identifier: "SessionRoutingDecision" })
+export type Decision = typeof Decision.Type
+
 export const RouteResult = Schema.Struct({
-  decision: Schema.optional(Candidate),
+  decision: Decision,
   candidates: Schema.Array(Candidate),
 }).annotate({ identifier: "SessionRouteResult" })
 export interface RouteResult extends Schema.Schema.Type<typeof RouteResult> {}

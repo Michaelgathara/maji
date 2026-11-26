@@ -1,4 +1,5 @@
 import type { SessionRouting } from "@opencode/schema/session-routing"
+import { RoutingPolicy } from "./routing-policy.js"
 
 export type RoutingPart = {
   type: string
@@ -34,13 +35,12 @@ export type RouteScore = {
 }
 
 export type RouteOutcome = {
-  decision?: RouteScore
+  decision: RoutingPolicy.Decision
   candidates: RouteScore[]
 }
 
 const CARD_TEXT_LIMIT = 6000
 const SCORE_THRESHOLD = 3.8
-const STAY_MARGIN = 2
 const AMBIGUITY_MARGIN = 1.15
 
 export function routingCardNeedsRefresh(input: { card?: SessionRouting.Card; pendingInput: number; busy: boolean }) {
@@ -58,7 +58,7 @@ export function routePrompt(input: {
   now?: number
 }): RouteOutcome {
   const prompt = normalize(input.prompt)
-  if (!prompt) return { candidates: [] }
+  if (!prompt) return { decision: { type: "new" }, candidates: [] }
 
   const tokens = tokenize(prompt)
   const intents = classifyIntents(prompt)
@@ -153,9 +153,19 @@ export function routePrompt(input: {
                     ? "recent follow-up"
                     : "recent session"
 
-      return { candidate, score, reason }
+      const evidence: RoutingPolicy.Evidence =
+        explicitTitle ||
+        pathMatches + titleOverlap + summaryOverlap + topicOverlap + questionOverlap + contextOverlap + phraseMatches >
+          0
+          ? "topical"
+          : current && isContinuation(prompt)
+            ? "continuation"
+            : pendingInput > 0 && affirmative && (!input.currentSessionID || current)
+              ? "pendingReply"
+              : "none"
+      return { candidate, score, reason, evidence }
     })
-    .filter((item) => item.score >= SCORE_THRESHOLD)
+    .filter((item) => item.score >= SCORE_THRESHOLD && item.evidence !== "none")
     .toSorted((a, b) => b.score - a.score || b.candidate.updated - a.candidate.updated)
 
   const ranked = scored.slice(0, 5).map((item) => ({
@@ -166,28 +176,32 @@ export function routePrompt(input: {
   }))
 
   const best = scored[0]
-  if (!best) return { candidates: ranked }
-
-  const currentCandidate = input.currentSessionID
-    ? scored.find((item) => item.candidate.id === input.currentSessionID)
-    : undefined
-  if (
-    currentCandidate &&
-    best.candidate.id !== input.currentSessionID &&
-    best.score - currentCandidate.score < STAY_MARGIN
-  )
-    return { candidates: ranked }
-
   const next = scored[1]
-  if (
-    next &&
-    best.score - next.score < AMBIGUITY_MARGIN &&
-    (best.reason !== "title match" || next.reason === "title match") &&
-    !(best.reason === "memory match" && next.reason !== "memory match" && next.candidate.id !== input.currentSessionID)
-  )
-    return { candidates: ranked }
+  return {
+    decision: RoutingPolicy.decide({
+      current: input.currentSessionID,
+      ranked: scored.map((item) => ({ sessionID: item.candidate.id, evidence: item.evidence, aboveThreshold: true })),
+      ambiguous:
+        !!best &&
+        !!next &&
+        ((best.evidence === "pendingReply" && next.evidence === "pendingReply") ||
+          (best.score - next.score < AMBIGUITY_MARGIN &&
+            (best.reason !== "title match" || next.reason === "title match") &&
+            !(
+              best.reason === "memory match" &&
+              next.reason !== "memory match" &&
+              next.candidate.id !== input.currentSessionID
+            ))),
+    }),
+    candidates: ranked,
+  }
+}
 
-  return { decision: ranked[0], candidates: ranked }
+function isContinuation(prompt: string) {
+  return (
+    isAffirmative(prompt) ||
+    /^(?:(?:can|could) you |please )?(?:continue|keep going|go on|carry on|try again)\b/.test(prompt)
+  )
 }
 
 export function buildRoutingCard(input: {
