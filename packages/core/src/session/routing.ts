@@ -9,14 +9,8 @@ import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Card, CardEntry, RouteResult } from "@opencode/schema/session-routing"
 import { Session as SessionSchema } from "@opencode/schema/session"
 import { Context, DateTime, Effect, Layer, Schema } from "effect"
-import { SessionRecentText } from "./recent-text.js"
-import {
-  buildRoutingCard,
-  routePrompt,
-  routingCardNeedsRefresh,
-  type RouteCandidate,
-  type RoutingMessage,
-} from "./routing-engine.js"
+import { RoutingCard } from "./routing-card.js"
+import { routePrompt, routingCardNeedsRefresh, type RouteCandidate } from "./routing-engine.js"
 
 export const RouteInput = Schema.Struct({
   text: Schema.String,
@@ -26,6 +20,7 @@ export const RouteInput = Schema.Struct({
 export type RouteInput = typeof RouteInput.Type
 
 const StoredCard = Schema.Struct({
+  revision: Schema.Literal(2),
   sessionUpdated: Schema.Finite,
   card: Card,
 })
@@ -87,13 +82,14 @@ const layer = Layer.effect(
       busy: boolean
     }) {
       const messages = yield* sessions.messages({ sessionID: input.session.id, limit: TRANSCRIPT_LIMIT })
-      const card = buildRoutingCard({
+      const card = RoutingCard.fromMessages({
         title: input.session.title ?? "Untitled task",
-        messages: messages.map(toRoutingMessage),
+        messages,
         pendingInput: input.pendingInput,
         busy: input.busy,
       })
       yield* kv.set(`${KEY_PREFIX}${input.session.id}`, {
+        revision: 2,
         sessionUpdated: DateTime.toEpochMillis(input.session.time.updated),
         card,
       })
@@ -206,13 +202,6 @@ function toCandidate(input: { sessionID: string; title: string; score: number; r
     title: input.title,
     score: input.score,
     reason: input.reason,
-  }
-}
-
-function toRoutingMessage(message: Parameters<typeof SessionRecentText.messageToText>[0]): RoutingMessage {
-  return {
-    role: message.type === "user" || message.type === "shell" ? "user" : "assistant",
-    parts: [{ type: "text", text: SessionRecentText.messageToText(message) }],
   }
 }
 

@@ -286,7 +286,7 @@ describe("routing-engine", () => {
     expect(card.taskType).toBe("security audit")
     expect(card.topics).toContain("security audit")
     expect(card.intents).toContain("security-audit")
-    expect(card.currentStatus).toBe("finished with an outcome")
+    expect(card.currentStatus).toBe("idle")
     expect(card.outcome).toContain("security audit found")
     expect(card.lastAssistantReply).toContain("medium-risk auth issues")
     expect(card.text).toContain("security audit")
