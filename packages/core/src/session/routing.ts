@@ -180,7 +180,10 @@ const layer = Layer.effect(
         ),
       })
       return {
-        decision: outcome.decision ? toCandidate(outcome.decision) : undefined,
+        decision:
+          "sessionID" in outcome.decision
+            ? { ...outcome.decision, sessionID: SessionSchema.ID.make(outcome.decision.sessionID) }
+            : outcome.decision,
         candidates: outcome.candidates.map(toCandidate),
       }
     })

@@ -1,3 +1,5 @@
+import type { SessionRoutingDecision } from "@opencode/client/promise"
+
 export type RouteCandidate = {
   sessionID: string
   title: string
@@ -5,9 +7,23 @@ export type RouteCandidate = {
   score?: number
 }
 
-export type RouteTarget = ({ type: "session" } & RouteCandidate) | { type: "new" } | { type: "stay" }
+export type RouteTarget =
+  | ({ type: "session" } & RouteCandidate)
+  | { type: "new" }
+  | { type: "stay" }
+  | { type: "uncertain" }
 
 export type DeliverySource = "automatic" | "manual"
+
+export function automaticRouteTarget(
+  decision: SessionRoutingDecision,
+  candidates: readonly RouteCandidate[],
+): RouteTarget {
+  if (decision.type === "new" || decision.type === "uncertain") return { type: decision.type }
+  if (decision.type === "current") return { type: "stay" }
+  const candidate = candidates.find((item) => item.sessionID === decision.sessionID)
+  return candidate ? { type: "session", ...candidate } : { type: "uncertain" }
+}
 
 export function routeTargetKey(target: RouteTarget) {
   if (target.type === "session") return `session:${target.sessionID}`
@@ -17,11 +33,13 @@ export function routeTargetKey(target: RouteTarget) {
 export function routeTargetTitle(target: RouteTarget) {
   if (target.type === "session") return target.title
   if (target.type === "new") return "New task"
+  if (target.type === "uncertain") return "Choose a task"
   return "Current task"
 }
 
 export function routeTargetDetail(target: RouteTarget, source: DeliverySource) {
   if (source === "manual") return "You chose this task"
+  if (target.type === "uncertain") return "More than one task fits"
   if (target.type !== "session") return target.type === "new" ? "Start fresh" : "Keep working here"
   return explainRouteReason(target.reason)
 }

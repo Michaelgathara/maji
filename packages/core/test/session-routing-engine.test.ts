@@ -41,6 +41,54 @@ function candidate(input: {
 }
 
 describe("routing-engine", () => {
+  test.each([undefined, "auth"])("starts fresh for an unrelated prompt with current chat %s", (currentSessionID) => {
+    const outcome = routePrompt({
+      prompt: "Help me plan a vacation in Kyoto",
+      currentSessionID,
+      candidates: [candidate({ id: "auth", title: "OAuth callback bug", busy: true, updated: now })],
+      directory: "/repo",
+      now,
+    })
+    expect(outcome).toEqual({ decision: { type: "new" }, candidates: [] })
+  })
+
+  test("keeps an approval in the current conversation instead of an unrelated waiting chat", () => {
+    const outcome = routePrompt({
+      prompt: "yes",
+      currentSessionID: "travel",
+      candidates: [
+        candidate({ id: "travel", title: "Kyoto trip" }),
+        candidate({ id: "auth", title: "OAuth callback bug", pendingInput: 1 }),
+      ],
+      directory: "/repo",
+      now,
+    })
+    expect(outcome.decision).toEqual({ type: "current", sessionID: "travel" })
+  })
+
+  test("requires a choice when multiple conversations are waiting for an approval", () => {
+    const outcome = routePrompt({
+      prompt: "yes",
+      candidates: [
+        candidate({ id: "travel", title: "Kyoto trip", pendingInput: 1 }),
+        candidate({ id: "auth", title: "OAuth callback bug", pendingInput: 1, updated: now - 600_000 }),
+      ],
+      directory: "/repo",
+      now,
+    })
+    expect(outcome.decision).toEqual({ type: "uncertain" })
+  })
+
+  test("shared task intent alone cannot qualify a conversation", () => {
+    const outcome = routePrompt({
+      prompt: "Fix a crash in checkout",
+      candidates: [candidate({ id: "auth", title: "OAuth callback", card: { intents: ["bugfix"] } })],
+      directory: "/repo",
+      now,
+    })
+    expect(outcome.decision).toEqual({ type: "new" })
+  })
+
   test("routes a topical prompt to the matching session", () => {
     const outcome = routePrompt({
       prompt: "Can you also fix the oauth callback tests?",
@@ -49,8 +97,8 @@ describe("routing-engine", () => {
       now,
     })
 
-    expect(outcome.decision?.sessionID).toBe("a")
-    expect(outcome.decision?.reason).toBe("topic match")
+    expect(outcome.decision).toMatchObject({ sessionID: "a" })
+    expect(outcome.candidates[0]?.reason).toBe("topic match")
   })
 
   test("abstains when two sessions are similarly likely", () => {
@@ -61,7 +109,7 @@ describe("routing-engine", () => {
       now,
     })
 
-    expect(outcome.decision).toBeUndefined()
+    expect(outcome.decision).toEqual({ type: "uncertain" })
     expect(outcome.candidates.length).toBeGreaterThan(0)
   })
 
@@ -73,8 +121,8 @@ describe("routing-engine", () => {
       now,
     })
 
-    expect(outcome.decision?.sessionID).toBe("a")
-    expect(outcome.decision?.reason).toBe("waiting for input")
+    expect(outcome.decision).toMatchObject({ sessionID: "a" })
+    expect(outcome.candidates[0]?.reason).toBe("waiting for input")
   })
 
   test("uses recent conversation text when titles are vague", () => {
@@ -92,8 +140,8 @@ describe("routing-engine", () => {
       now,
     })
 
-    expect(outcome.decision?.sessionID).toBe("a")
-    expect(outcome.decision?.reason).toBe("conversation match")
+    expect(outcome.decision).toMatchObject({ sessionID: "a" })
+    expect(outcome.candidates[0]?.reason).toBe("conversation match")
   })
 
   test("uses file mentions as a strong routing signal", () => {
@@ -111,8 +159,8 @@ describe("routing-engine", () => {
       now,
     })
 
-    expect(outcome.decision?.sessionID).toBe("a")
-    expect(outcome.decision?.reason).toBe("file match")
+    expect(outcome.decision).toMatchObject({ sessionID: "a" })
+    expect(outcome.candidates[0]?.reason).toBe("file match")
   })
 
   test("routes status follow-ups to the session with matching conversation context", () => {
@@ -136,8 +184,8 @@ describe("routing-engine", () => {
       now,
     })
 
-    expect(outcome.decision?.sessionID).toBe("a")
-    expect(outcome.decision?.reason).toBe("conversation match")
+    expect(outcome.decision).toMatchObject({ sessionID: "a" })
+    expect(outcome.candidates[0]?.reason).toBe("conversation match")
   })
 
   test("switches away from the current session when another session is clearly relevant", () => {
@@ -167,11 +215,11 @@ describe("routing-engine", () => {
       now,
     })
 
-    expect(outcome.decision?.sessionID).toBe("b")
-    expect(outcome.decision?.reason).toBe("title match")
+    expect(outcome.decision).toMatchObject({ sessionID: "b" })
+    expect(outcome.candidates[0]?.reason).toBe("title match")
   })
 
-  test("keeps ordinary follow-ups in the current session", () => {
+  test("reports uncertainty when a follow-up also fits another conversation", () => {
     const outcome = routePrompt({
       prompt: "Can you keep going on auth?",
       candidates: [
@@ -183,7 +231,7 @@ describe("routing-engine", () => {
       now,
     })
 
-    expect(outcome.decision).toBeUndefined()
+    expect(outcome.decision).toEqual({ type: "uncertain" })
   })
 
   test("routes using stored cards even without transcript text", () => {
@@ -217,8 +265,8 @@ describe("routing-engine", () => {
       now,
     })
 
-    expect(outcome.decision?.sessionID).toBe("a")
-    expect(outcome.decision?.reason).toBe("memory match")
+    expect(outcome.decision).toMatchObject({ sessionID: "a" })
+    expect(outcome.candidates[0]?.reason).toBe("memory match")
   })
 
   test("builds a routing card from transcript messages", () => {
@@ -260,7 +308,7 @@ describe("routing-engine", () => {
       now,
     })
 
-    expect(outcome.decision?.sessionID).toBe("a")
+    expect(outcome.decision).toMatchObject({ sessionID: "a" })
   })
 
   test("refreshes cards when live work state moves beyond stored state", () => {

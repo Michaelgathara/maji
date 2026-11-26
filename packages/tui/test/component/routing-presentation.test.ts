@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import {
+  automaticRouteTarget,
   explainRouteReason,
   routeTargetDetail,
   routeTargetKey,
@@ -7,6 +8,11 @@ import {
 } from "../../src/component/prompt/routing-presentation"
 
 describe("routing presentation", () => {
+  test("preserves explicit new, current, and uncertain decisions", () => {
+    expect(automaticRouteTarget({ type: "new" }, [])).toEqual({ type: "new" })
+    expect(automaticRouteTarget({ type: "current", sessionID: "ses_current" }, [])).toEqual({ type: "stay" })
+    expect(automaticRouteTarget({ type: "uncertain" }, [])).toEqual({ type: "uncertain" })
+  })
   test("describes an automatic session destination in task language", () => {
     const target = {
       type: "session" as const,

@@ -72,7 +72,14 @@ import { truncateFilePath } from "../../ui/file-path"
 import { PromptMetadataRow } from "./metadata"
 import { limitLabel, useUsageLimits } from "../usage"
 import { DialogRouteTarget } from "../dialog-route-target"
-import { routeTargetTitle, type DeliverySource, type RouteCandidate, type RouteTarget } from "./routing-presentation"
+import {
+  automaticRouteTarget,
+  routeTargetTitle,
+  type DeliverySource,
+  type RouteCandidate,
+  type RouteTarget,
+} from "./routing-presentation"
+import type { SessionRoutingDecision } from "@opencode/client/promise"
 
 export type PromptProps = {
   sessionID?: string
@@ -1108,7 +1115,7 @@ export function Prompt(props: PromptProps) {
   }
 
   type RoutePreview = RouteDraft & {
-    decision?: RouteCandidate
+    decision: SessionRoutingDecision
     candidates: RouteCandidate[]
   }
 
@@ -1208,8 +1215,8 @@ export function Prompt(props: PromptProps) {
   const routeTarget = createMemo<RouteTarget>(() => {
     const override = currentRouteOverride()
     if (override) return override.target
-    const decision = currentRoutePreview()?.decision
-    if (decision && decision.sessionID !== props.sessionID) return { type: "session", ...decision }
+    const preview = currentRoutePreview()
+    if (preview) return automaticRouteTarget(preview.decision, preview.candidates)
     return props.sessionID ? { type: "stay" } : { type: "new" }
   })
 
@@ -1294,6 +1301,13 @@ export function Prompt(props: PromptProps) {
     const routingDraft = routeDraft()
     const routingOverride = currentRouteOverride()
     const routingPreview = currentRoutePreview()
+    const routingTarget =
+      routingOverride?.target ??
+      (routingPreview ? automaticRouteTarget(routingPreview.decision, routingPreview.candidates) : undefined)
+    if (routingTarget?.type === "uncertain") {
+      chooseRouteTarget()
+      return false
+    }
     const slash = argumentSlash(inputText, keymapCommands())
     if (delivery === "queue" && (store.mode === "shell" || exitWord || slash)) {
       toast.show({ message: "This prompt cannot be queued", variant: "warning" })
@@ -1372,14 +1386,8 @@ export function Prompt(props: PromptProps) {
     const variant = selection.variant
     let sessionID = props.sessionID
     let session = sessionID ? data.session.get(sessionID) : undefined
-    const routed = routingDraft
-      ? routingOverride?.target.type === "session"
-        ? routingOverride.target
-        : routingOverride?.target.type === "new"
-          ? undefined
-          : routingPreview?.decision
-      : undefined
-    if (routingDraft && routingOverride?.target.type === "new") {
+    const routed = routingDraft && routingTarget?.type === "session" ? routingTarget : undefined
+    if (routingDraft && routingTarget?.type === "new") {
       sessionID = undefined
       session = undefined
     }
@@ -1559,7 +1567,7 @@ export function Prompt(props: PromptProps) {
 
     // Optimistic admission puts the message in the store synchronously, so
     // the session view renders it on arrival.
-    if (!props.sessionID) {
+    if (sessionID !== props.sessionID) {
       if (pendingEditorSelection) editor.preserveSelectionFromNewSession()
       // Text typed while session creation was in flight lives in this (home)
       // prompt, which unmounts on navigation and would stash it under the

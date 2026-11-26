@@ -176,7 +176,8 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
         OpenApi.annotations({
           identifier: "experimental.session.route",
           summary: "Route a prompt",
-          description: "Choose the existing Maji task that best matches a prompt, or abstain when no match is clear.",
+          description:
+            "Experimental: may change without compatibility guarantees. Choose an existing task, the current task, a new task, or report uncertainty.",
         }),
       ),
     )
