@@ -31,7 +31,7 @@ import { expandPromptInputPastedText, realignPromptInputMentions } from "../../p
 import { parseSlashHead } from "../../prompt/parse"
 import { createStore, produce, unwrap } from "solid-js/store"
 import { emptyPrompt, usePromptHistory, type ChipData, type PromptInfo, type PromptPartRef } from "../../prompt/history"
-import { registerComposer, saveDraft, takeDraft } from "./draft-stash"
+import { appendToSessionPrompt, registerComposer, saveDraft, takeDraft } from "./draft-stash"
 import { Skill } from "@opencode/schema/skill"
 import { computePromptTraits } from "../../prompt/traits"
 import { expandPastedTextPlaceholders, expandTrackedPastedText } from "../../prompt/part"
@@ -1560,7 +1560,12 @@ export function Prompt(props: PromptProps) {
           // the server makes an unchanged selection a no-op.
           prepare: commitModel,
         })
-        .catch((error) => (newSession ? newSession.recover(error) : fail("Failed to send prompt", error)))
+        .catch((error) => {
+          if (newSession) return newSession.recover(error)
+          fail("Failed to send prompt", error)
+          // Routing may have unmounted this composer before admission rejects.
+          if (disposed) appendToSessionPrompt(target, entry, renderer.widthMethod)
+        })
       if (pendingEditorSelection) editor.markSelectionSent()
     }
 

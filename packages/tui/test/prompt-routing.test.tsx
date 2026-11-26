@@ -16,6 +16,7 @@ const suggestion: ExperimentalSessionRouteOutput = {
 async function routingApp(
   answer: (input: typeof Lookup.Type) => Promise<ExperimentalSessionRouteOutput | Response>,
   width = 100,
+  admission?: () => Promise<Response>,
 ) {
   takeDraft("ses_route_a")
   takeDraft("ses_route_b")
@@ -49,6 +50,7 @@ async function routingApp(
         const sessionID = url.pathname.split("/")[3]
         calls.push(sessionID)
         prompted.resolve({ sessionID, text: input.text })
+        if (admission) return admission()
         return json({
           data: {
             id: input.id,
@@ -87,6 +89,27 @@ test("a failed route preserves the unsent draft", async () => {
   setup.mockInput.pressEnter()
   await setup.waitForFrame((frame) => frame.includes("Could not choose a task"))
   expect(setup.calls).toEqual([])
+  expect(setup.renderer.currentFocusedEditor?.plainText).toBe("Compare Kyoto hotels")
+})
+
+test("a rejected admission restores the captured draft in the receiving chat after navigation", async () => {
+  const admission = Promise.withResolvers<Response>()
+  await using setup = await routingApp(
+    async () => suggestion,
+    100,
+    () => admission.promise,
+  )
+  await setup.mockInput.typeText("Compare Kyoto hotels")
+  setup.mockInput.pressEnter()
+  await setup.prompted
+  await setup.waitForFrame((frame) => frame.includes("Kyoto hotels"))
+  admission.resolve(
+    json(
+      Schema.TaggedStruct("InvalidRequestError", { message: Schema.String }).make({ message: "Admission rejected" }),
+      { status: 400 },
+    ),
+  )
+  await setup.waitForFrame((frame) => frame.includes("Failed to send prompt"))
   expect(setup.renderer.currentFocusedEditor?.plainText).toBe("Compare Kyoto hotels")
 })
 
