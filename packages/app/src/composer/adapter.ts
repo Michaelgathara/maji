@@ -88,9 +88,7 @@ export type ComposerSession = {
     }
   }
   file: {
-    list: (
-      input: Parameters<ServerSDK["api"]["file"]["list"]>[0],
-    ) => Promise<{ data: readonly { path: string }[] }>
+    list: (input: Parameters<ServerSDK["api"]["file"]["list"]>[0]) => Promise<{ data: readonly { path: string }[] }>
   }
   data: {
     location: { command: Pick<Data["location"]["command"], "list"> }
@@ -112,11 +110,13 @@ export type ComposerSession = {
     | undefined
   >
   admitted: (messageID: string) => boolean
+  onPromptAdmitted?: () => void
   // Moves the run's blocking work to the background once a steer is admitted; undefined for another session.
   background?: () => { move: () => Promise<void> } | undefined
 }
 
 type ComposerAdapterBase = {
+  routing?: () => { directory: string; currentSessionID?: string } | undefined
   state: ComposerStateTarget
   ready: Accessor<boolean>
   controls: Accessor<ComposerControls>

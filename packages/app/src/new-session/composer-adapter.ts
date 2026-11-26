@@ -97,6 +97,10 @@ export function createNewSessionComposerAdapter(props: {
 
   const adapter: NewSessionComposerAdapter = {
     kind: "new-session",
+    routing: () =>
+      props.worktree() === "create"
+        ? undefined
+        : { directory: props.worktree() === "main" ? props.root() : props.worktree() },
     state,
     ready: prompt.ready,
     controls,

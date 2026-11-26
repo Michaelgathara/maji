@@ -88,6 +88,9 @@ const waiting = new Map<string, Set<Gate>>()
 
 type ComposerSubmitInput = {
   adapter: ComposerAdapter
+  route?: (
+    submission: ComposerSubmission,
+  ) => Promise<{ session: ComposerSession; complete?: () => Promise<void> } | "new" | undefined>
   mode: Accessor<"normal" | "shell">
   commands: Accessor<readonly { name: string }[] | undefined>
   editor: () => HTMLDivElement | undefined
@@ -299,7 +302,7 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
           ),
         (error) => {
           dispatch({ type: "submit.aborted", attempt: effect.attempt })
-          throw error
+          input.notify.failed("prompt", error)
         },
       )
 
@@ -454,7 +457,17 @@ function snapshot(input: ComposerSubmitInput, alternate: boolean, first = false)
     commands: input.commands(),
     clientCommand: mode === "normal" ? input.clientCommand?.(text) : undefined,
     comments: input.comments.capture(),
-    session: input.adapter.kind === "active-session" ? input.adapter.session() : undefined,
+    session:
+      input.adapter.kind === "active-session" &&
+      !(
+        input.route &&
+        input.adapter.routing?.() &&
+        mode === "normal" &&
+        !text.trimStart().startsWith("/") &&
+        (input.delivery?.(alternate) ?? "steer") === "steer"
+      )
+        ? input.adapter.session()
+        : undefined,
   }
 }
 
@@ -478,6 +491,13 @@ async function startSession(
   submission: ComposerSubmission,
   handle: ComposerSubmissionHandle,
 ) {
+  const routed =
+    submission.mode === "normal" && !submission.text.trimStart().startsWith("/") && submission.delivery === "steer"
+      ? await input.route?.(submission)
+      : "new"
+
+  if (input.route && routed === undefined) return
+
   // Images restored from a draft or history carry ids only; the optimistic message shows their URLs.
   const images = await Promise.all(
     submission.images.map(async (image) => ({
@@ -485,6 +505,8 @@ async function startSession(
       blob: { ...image.blob, url: (await resolveBlobUrl(image.blob).catch(() => undefined)) ?? image.blob.url },
     })),
   )
+
+  if (routed && routed !== "new") return { ...routed, images, cleanupReady: Promise.resolve() }
 
   if (input.adapter.kind === "active-session")
     return { images, session: input.adapter.session(), cleanupReady: Promise.resolve(), complete: undefined }
@@ -689,6 +711,8 @@ function dispatchPrompt(
     const admitted = result.ok || session.admitted(value.id)
     updateStatus(session, admitted ? { type: "admitted" } : { type: "failed", id: value.id })
 
+    if (admitted) session.onPromptAdmitted?.()
+
     if (value.delivery !== "steer") return
 
     if (admitted) return session.handoff.settle(value.id)
@@ -736,6 +760,7 @@ function restoreSubmission(
     value: ComposerSubmission
     kind: SubmissionKind
     comments: PromptHistoryComment[]
+    session: ComposerSession
   },
   back: ClearedComposer,
 ) {
@@ -745,7 +770,11 @@ function restoreSubmission(
 
   // Only a prompt was admitted under its ID. A recovered follow-up changes the payload, so it needs a new one.
   if (submission.kind.type === "prompt" && !back.following)
-    submission.draft.target.retry.set({ id: value.id, fingerprint: retryFingerprint(value) })
+    submission.draft.target.retry.set({
+      id: value.id,
+      fingerprint: retryFingerprint(value),
+      route: { sessionID: submission.session.id, directory: submission.session.directory, create: false },
+    })
 
   return true
 }

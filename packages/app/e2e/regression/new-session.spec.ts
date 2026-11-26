@@ -1,8 +1,16 @@
 import { expect, test, type Locator, type Page } from "@playwright/test"
-import type { OpenCodeEvent, SessionMessageInfo, WorktreeDirectory } from "@opencode/client/promise"
+import { Schema } from "effect"
+import type {
+  OpenCodeEvent,
+  SessionMessageInfo,
+  WorktreeDirectory,
+  ExperimentalSessionRouteOutput,
+  InvalidRequestError,
+} from "@opencode/client/promise"
 import { timelinePresets } from "@opencode/session-ui/timeline/detail"
 import { draftHref, expectPath, holdRoute, NO_PROVIDER, project, provider, seed, sessionHref, T0 } from "../utils/app"
 import { mockOpenCodeServer } from "../utils/mock-server"
+import { expectSessionTitle } from "../utils/waits"
 import {
   newSessionBaseBranch,
   newSessionLocation,
@@ -10,6 +18,7 @@ import {
   openDraft,
   openSession,
   openWorktreeDraft,
+  waitForSavedPrompt,
   type WorkspaceInput,
 } from "../utils/workspace"
 
@@ -32,6 +41,164 @@ const headers = { "access-control-allow-origin": "*" }
 const editor = (page: Page) => page.locator('[data-component="composer-editor"]')
 
 const submit = (page: Page) => page.locator('[data-action="composer-submit"]')
+
+for (const fromDraft of [false, true]) {
+  test(`routing from ${fromDraft ? "a new draft" : "an existing chat"} waits before sending and opens the receiving chat`, async ({
+    page,
+  }) => {
+    const decision = Promise.withResolvers<ExperimentalSessionRouteOutput>()
+    let routingRequests = 0
+    const admitted: string[] = []
+
+    const view = await (fromDraft ? openDraft : openSession)(page, {
+      name: "RoutingDestination",
+      sessions: [
+        { id: "ses_route_a", title: "OAuth callback" },
+        { id: "ses_route_b", title: "Kyoto hotels" },
+      ],
+      onRoute: () => {
+        routingRequests += 1
+
+        return decision.promise
+      },
+      onPrompt: (input) => admitted.push(input.sessionID),
+    })
+
+    await view.editor.fill("Compare Kyoto hotels")
+    await view.editor.press("Enter")
+    await expect.poll(() => routingRequests).toBeGreaterThan(0)
+    await expect(view.editor).toHaveText("Compare Kyoto hotels")
+    expect(admitted).toEqual([])
+    decision.resolve({
+      decision: { type: "existing", sessionID: "ses_route_b" },
+      candidates: [{ sessionID: "ses_route_b", title: "Kyoto hotels", score: 9, reason: "topic match" }],
+    })
+    await expectPath(page, sessionHref("ses_route_b"))
+    await expect(editor(page)).toBeEditable()
+    await expect(editor(page)).toBeEmpty()
+    await expect.poll(() => admitted).toEqual(["ses_route_b"])
+  })
+}
+
+test("routing failures and ambiguity preserve the draft, and a manual current chat overrides the suggestion", async ({
+  page,
+}) => {
+  const admitted: string[] = []
+  let offline = true
+
+  const view = await openSession(page, {
+    name: "RoutingChoice",
+    sessions: [
+      { id: "ses_route_a", title: "OAuth callback" },
+      { id: "ses_route_b", title: "Kyoto hotels" },
+    ],
+    onRoute: () =>
+      offline
+        ? { status: 503, body: { message: "Routing offline" } }
+        : {
+            decision: { type: "uncertain" },
+            candidates: [{ sessionID: "ses_route_b", title: "Kyoto hotels", score: 9, reason: "topic match" }],
+          },
+    onPrompt: (input) => admitted.push(input.sessionID),
+  })
+
+  await view.editor.fill("Compare Kyoto hotels")
+  await view.editor.press("Enter")
+  await expect(page.getByText("Failed to send prompt", { exact: true })).toBeVisible()
+  await expect(view.editor).toHaveText("Compare Kyoto hotels")
+  expect(admitted).toEqual([])
+  offline = false
+  await view.editor.press("Enter")
+  const chooser = page.getByRole("dialog")
+  await expect(chooser.getByText("Choose a chat", { exact: true })).toBeVisible()
+  await chooser.getByRole("button", { name: "Current chat", exact: true }).click()
+  await expect(chooser).toBeHidden()
+  await view.editor.press("Enter")
+  await expect.poll(() => admitted).toEqual(["ses_route_a"])
+  await expectPath(page, sessionHref("ses_route_a"))
+  await expect(view.editor).toBeEmpty()
+})
+
+test("routing starts a fresh chat from an existing composer when no conversation fits", async ({ page }) => {
+  const admitted = Promise.withResolvers<string>()
+
+  const view = await openSession(page, {
+    name: "RoutingNew",
+    sessions: [{ id: "ses_route_a", title: "OAuth callback" }],
+    createdSessionTitle: "New Kyoto trip",
+    onRoute: () => ({ decision: { type: "new" }, candidates: [] }),
+    onPrompt: (input) => admitted.resolve(input.sessionID),
+  })
+
+  await view.editor.fill("Help plan a vacation in Kyoto")
+  await view.editor.press("Enter")
+  const receiving = await admitted.promise
+  expect(receiving).not.toBe("ses_route_a")
+  await expectPath(page, sessionHref(receiving))
+  await expect(editor(page)).toBeEditable()
+  await expect(editor(page)).toBeEmpty()
+})
+
+test("a rejected routed send restores its draft and retains its destination through reload and retry", async ({
+  page,
+}) => {
+  let offline = true
+  const received = Promise.withResolvers<string>()
+  const attempts: string[] = []
+
+  const view = await openSession(page, {
+    name: "RoutingRetry",
+    sessions: [
+      { id: "ses_route_a", title: "OAuth callback" },
+      { id: "ses_route_b", title: "Kyoto hotels" },
+      { id: "ses_route_c", title: "Other hotels" },
+    ],
+    onRoute: () => ({
+      decision: { type: "existing", sessionID: offline ? "ses_route_b" : "ses_route_c" },
+      candidates: [
+        {
+          sessionID: offline ? "ses_route_b" : "ses_route_c",
+          title: offline ? "Kyoto hotels" : "Other hotels",
+          score: 9,
+          reason: "topic match",
+        },
+      ],
+    }),
+    onPrompt: (input) => received.resolve(input.sessionID),
+  })
+
+  await page.route(/\/api\/session\/ses_route_b\/prompt(?:\?|$)/, async (route) => {
+    if (route.request().method() !== "POST") return route.fallback()
+    attempts.push(route.request().postData() ?? "")
+
+    if (offline)
+      return route.fulfill({
+        status: 400,
+        headers,
+        json: Schema.TaggedStruct("InvalidRequestError", { message: Schema.String }).make({
+          message: "Admission rejected",
+        }) satisfies InvalidRequestError,
+      })
+    await route.fallback()
+  })
+
+  await view.editor.fill("Compare Kyoto hotels")
+  await view.editor.press("Enter")
+  await expect(page.getByText("Failed to send prompt", { exact: true })).toBeVisible()
+  await expectPath(page, sessionHref("ses_route_a"))
+  await expect(view.editor).toHaveText("Compare Kyoto hotels")
+  await waitForSavedPrompt(page, "Compare Kyoto hotels", "ses_route_b")
+  await page.reload()
+  await expectSessionTitle(page, "OAuth callback")
+  await expect(editor(page)).toBeEditable()
+  await expect(editor(page)).toHaveText("Compare Kyoto hotels")
+  await expect(page.getByRole("button", { name: "Kyoto hotels", exact: true })).toBeDisabled()
+  offline = false
+  await editor(page).press("Enter")
+  expect(await received.promise).toBe("ses_route_b")
+  await expectPath(page, sessionHref("ses_route_b"))
+  expect(new Set(attempts).size).toBe(1)
+})
 
 test("new-session project picker and provider tip show keyboard focus", async ({ page }) => {
   await openDraft(page, { name: "DraftFocus", provider: NO_PROVIDER })

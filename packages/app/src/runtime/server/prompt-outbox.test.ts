@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import type { SessionInboxUser } from "@opencode/client/promise"
+import { OpenCode, type SessionInboxUser, type InvalidRequestError } from "@opencode/client/promise"
+import { Schema } from "effect"
 import type { Data } from "@opencode/client/solid"
 import { createRoot } from "solid-js"
 import { createPromptOutbox, type PromptOutboxEntry } from "./prompt-outbox"
@@ -196,5 +197,42 @@ describe("prompt outbox", () => {
       expect(saved.values.size).toBe(0)
       dispose()
     })
+  })
+
+  test("a declared HTTP rejection from the real client is permanent even without a numeric status on the error", async () => {
+    const saved = storage()
+
+    const client = OpenCode.make({
+      baseUrl: "http://localhost",
+      fetch: Object.assign(
+        async () =>
+          Response.json(
+            Schema.TaggedStruct("InvalidRequestError", { message: Schema.String }).make({
+              message: "Admission rejected",
+            }) satisfies InvalidRequestError,
+            {
+              status: 400,
+            },
+          ),
+        { preconnect: fetch.preconnect },
+      ),
+    })
+
+    const source = data((id) =>
+      client.session.prompt({ sessionID: "ses_1", id, text: "hello" }).then(() => receipt(id)),
+    )
+
+    using owner = createRoot((dispose) => ({
+      dispose,
+      [Symbol.dispose]: dispose,
+      outbox: createPromptOutbox({ scope, sdk, data: source, storage: saved.driver }),
+    }))
+
+    await expect(owner.outbox.prompt({ sessionID: "ses_1", id: "msg_bad", text: "hello" })).rejects.toHaveProperty(
+      "_tag",
+      "InvalidRequestError",
+    )
+    expect(owner.outbox.entries.msg_bad).toBeUndefined()
+    expect(saved.values.size).toBe(0)
   })
 })

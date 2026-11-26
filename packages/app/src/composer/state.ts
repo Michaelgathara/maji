@@ -159,7 +159,8 @@ function createComposerStateValue(store: ComposerStore, setStore: SetStoreFuncti
     },
     retry: {
       current: () => store.retry,
-      set: (retry: ComposerRetry) => setStore("retry", { id: retry.id, fingerprint: retry.fingerprint }),
+      set: (retry: ComposerRetry) =>
+        setStore("retry", { id: retry.id, fingerprint: retry.fingerprint, route: retry.route }),
       clear: () => {
         if (untrack(() => store.retry) !== undefined) setStore("retry", undefined)
       },

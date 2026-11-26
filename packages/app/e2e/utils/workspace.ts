@@ -1,5 +1,5 @@
 import { expect, type Page } from "@playwright/test"
-import type { Schema } from "effect"
+import { Schema } from "effect"
 import {
   NO_PROVIDER,
   REMOTE_SERVER,
@@ -26,6 +26,32 @@ export type WorkspaceInput = Partial<Omit<MockServerConfig, "directory" | "proje
   sessions?: (Partial<Parameters<typeof session>[0]> & { id: string })[]
   // Merged over the default seed: the project used before, and a tab for every session.
   seed?: SeedInput
+}
+
+/** Wait for the browser draft transaction before a test reloads the page that owns it. */
+export async function waitForSavedPrompt(page: Page, text: string, destination: string) {
+  await expect
+    .poll(async () => {
+      const documents = await page.evaluate(
+        () =>
+          new Promise<unknown>((resolve, reject) => {
+            const open = indexedDB.open("opencode-drafts", 1)
+            open.onerror = () => reject(open.error)
+            open.onsuccess = () => {
+              const transaction = open.result.transaction("documents")
+              const request = transaction.objectStore("documents").getAll()
+              request.onsuccess = () => resolve(request.result)
+              request.onerror = () => reject(request.error)
+              transaction.oncomplete = () => open.result.close()
+            }
+          }),
+      )
+
+      return Schema.decodeUnknownSync(Schema.Array(Schema.String))(documents).some(
+        (document) => document.includes(text) && document.includes(destination),
+      )
+    })
+    .toBe(true)
 }
 
 // One project with sessions on the default mock server, plus the storage a returning user would have.
