@@ -367,7 +367,15 @@ export const ComposerStore = Persistence.struct({
   model: Persistence.optional(PromptModel),
   mode: Persistence.optional(Schema.Literals(["normal", "shell"])),
   // A retry stored before it carried its payload's fingerprint cannot prove its payload, so it reads as none.
-  retry: Persistence.optional(Schema.Struct({ id: SessionMessage.ID, fingerprint: Schema.NonEmptyString })),
+  retry: Persistence.optional(
+    Schema.Struct({
+      id: SessionMessage.ID,
+      fingerprint: Schema.NonEmptyString,
+      route: Schema.optional(
+        Schema.Struct({ sessionID: Schema.String, directory: Schema.String, create: Schema.Boolean }),
+      ),
+    }),
+  ),
   context: Persistence.struct({ items: Persistence.array(ContextEntry) }),
   quoteSources: Persistence.optional(Persistence.record(Schema.UndefinedOr(TimelineQuoteSource))),
 })

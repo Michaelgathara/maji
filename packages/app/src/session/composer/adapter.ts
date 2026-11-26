@@ -31,6 +31,7 @@ export function createActiveComposerAdapter(input: {
 
   const adapter: ActiveComposerAdapter = {
     kind: "active-session",
+    routing: () => ({ directory: location().directory, currentSessionID: id }),
     state,
     ready: prompt.ready,
     controls: input.controls,
@@ -55,6 +56,7 @@ export function createActiveComposerAdapter(input: {
     }),
     interrupt: () => {
       data.outbox.pause(id)
+
       return server.api.session
         .interrupt({ sessionID: id, resume: true })
         .then(() => undefined)

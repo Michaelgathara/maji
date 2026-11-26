@@ -5,7 +5,11 @@ import { buildPromptRequest } from "./request"
 import type { ContextItem, Prompt } from "./schema"
 
 /** The admission ID of a prompt whose send failed, kept to resend exactly the payload it carried. */
-export type ComposerRetry = { readonly id: SessionMessage.ID; readonly fingerprint: string }
+export type ComposerRetry = {
+  readonly id: SessionMessage.ID
+  readonly fingerprint: string
+  readonly route?: { readonly sessionID: string; readonly directory: string; readonly create: boolean }
+}
 
 export type ComposerRetryPayload = {
   readonly mode: "normal" | "shell"

@@ -27,6 +27,12 @@ const Json = Schema.Json.pipe(
 
 const JsonPayload = Schema.Unknown.pipe(HttpApiSchema.asJson())
 
+export const RoutingInput = Schema.Struct({
+  text: Schema.String,
+  currentSessionID: Schema.optional(Schema.String),
+  directory: Schema.optional(Schema.String),
+})
+
 const Query = Schema.Struct({
   directory: Schema.optional(Schema.String),
   parentID: Schema.optional(Schema.String),
@@ -427,6 +433,12 @@ const Group = HttpApiGroup.make("mock")
   .add(
     HttpApiEndpoint.get("sessionInbox", "/api/session/:sessionID/inbox", {
       params: SessionParams,
+      success: Json,
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("sessionRoute", "/api/experimental/session/route", {
+      payload: RoutingInput,
       success: Json,
     }),
   )

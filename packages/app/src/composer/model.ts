@@ -32,6 +32,7 @@ import { isCommentItem } from "./state"
 import type { PromptHistoryComment } from "./history/entry"
 import { createComposerHistory } from "./history/store"
 import { createComposerSubmit } from "./submit"
+import { createComposerRouting } from "./routing"
 import { composerSubmitView } from "./machine"
 import { isComposerPopoverOpen } from "./suggestions/machine"
 import { useAttachmentDestination } from "./attachments/destination"
@@ -39,6 +40,7 @@ import { parseClientSlashCommand } from "./client-slash-command"
 
 export type ComposerModel = ComposerEditorModel & {
   readonly model: ComposerControls["model"]
+  readonly routing?: ReturnType<typeof createComposerRouting>
 }
 
 const sendFailedTitle = {
@@ -296,8 +298,11 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
 
   const variants = createMemo(() => ["default", ...adapter.controls().model.selection.variant.list()])
 
+  const routing = createComposerRouting(adapter)
+
   const submission = createComposerSubmit({
     adapter,
+    route: routing.resolve,
     mode,
     commands: () => data.location.command.list({ directory: sdk().directory }),
     editor: () => editor,
@@ -638,7 +643,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
   ])
 
   // SAFETY: the `model` getter defined on the controller above completes `ComposerModel`.
-  return controller as ComposerModel
+  return Object.assign(controller, { routing }) as ComposerModel
 }
 
 function composerErrorMessage(language: ReturnType<typeof useLanguage>, cause: unknown) {
