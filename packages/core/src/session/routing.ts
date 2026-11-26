@@ -10,6 +10,10 @@ import { Card, CardEntry, RouteResult } from "@opencode/schema/session-routing"
 import { Session as SessionSchema } from "@opencode/schema/session"
 import { Context, DateTime, Effect, Layer, Schema } from "effect"
 import { RoutingCard } from "./routing-card.js"
+import { RoutingRetrieval } from "./routing-retrieval.js"
+import { Database } from "../database/database.js"
+import { SessionSearch } from "./search.js"
+import { SessionStore } from "./store.js"
 import { routePrompt, routingCardNeedsRefresh, type RouteCandidate } from "./routing-engine.js"
 
 export const RouteInput = Schema.Struct({
@@ -20,18 +24,18 @@ export const RouteInput = Schema.Struct({
 export type RouteInput = typeof RouteInput.Type
 
 const StoredCard = Schema.Struct({
-  revision: Schema.Literal(2),
+  revision: Schema.Literal(3),
   sessionUpdated: Schema.Finite,
   card: Card,
 })
 
-const CANDIDATE_LIMIT = 250
+const CANDIDATE_LIMIT = 29
 const REFRESH_LIMIT = 32
 const TRANSCRIPT_LIMIT = 40
 const KEY_PREFIX = "maji:session-routing:"
 
 export interface Interface {
-  readonly route: (input: RouteInput) => Effect.Effect<RouteResult>
+  readonly route: (input: RouteInput) => Effect.Effect<RouteResult, SessionSearch.IndexUnavailableError>
   readonly cards: () => Effect.Effect<CardEntry[]>
 }
 
@@ -43,6 +47,7 @@ const layer = Layer.effect(
     const sessions = yield* Session.Service
     const instances = yield* Instance.Service
     const kv = yield* KV.Service
+    const retrieval = yield* Effect.context<Database.Service | SessionSearch.Service | SessionStore.Service>()
 
     const candidateSessions = Effect.fn("SessionRouting.candidates")(function* () {
       const list = yield* sessions
@@ -58,19 +63,22 @@ const layer = Layer.effect(
       yield* Effect.forEach(
         candidates,
         (session) =>
-          Effect.all({
-            permissions: Permission.Service.use((permission) => permission.forSession(session.id)),
-            forms: Form.Service.use((form) => form.list({ sessionID: session.id })),
-          }).pipe(
-            instances.provide(session),
-            Effect.tap(({ permissions, forms }) =>
-              Effect.sync(() => {
-                const count = permissions.length + forms.length
-                if (count > 0) counts.set(session.id, count)
-              }),
-            ),
-            Effect.catchCause(() => Effect.void),
-          ),
+          Effect.gen(function* () {
+            if (instances.live && !(yield* instances.live(session))) return
+            yield* Effect.all({
+              permissions: Permission.Service.use((permission) => permission.forSession(session.id)),
+              forms: Form.Service.use((form) => form.list({ sessionID: session.id })),
+            }).pipe(
+              instances.provide(session),
+              Effect.tap(({ permissions, forms }) =>
+                Effect.sync(() => {
+                  const count = permissions.length + forms.length
+                  if (count > 0) counts.set(session.id, count)
+                }),
+              ),
+              Effect.catchCause(() => Effect.void),
+            )
+          }),
         { concurrency: 8, discard: true },
       )
       return counts
@@ -89,7 +97,7 @@ const layer = Layer.effect(
         busy: input.busy,
       })
       yield* kv.set(`${KEY_PREFIX}${input.session.id}`, {
-        revision: 2,
+        revision: 3,
         sessionUpdated: DateTime.toEpochMillis(input.session.time.updated),
         card,
       })
@@ -149,8 +157,7 @@ const layer = Layer.effect(
       return cards
     })
 
-    const context = Effect.fn("SessionRouting.context")(function* () {
-      const candidates = yield* candidateSessions()
+    const context = Effect.fn("SessionRouting.context")(function* (candidates: readonly SessionSchema.Info[]) {
       const pendingInput = yield* pendingInputCounts(candidates)
       const active = yield* sessions.active
       const cards = yield* ensureCards({ candidates, pendingInput, active })
@@ -158,7 +165,8 @@ const layer = Layer.effect(
     })
 
     const route = Effect.fn("SessionRouting.route")(function* (input: RouteInput) {
-      const current = yield* context()
+      const retrieved = yield* RoutingRetrieval.select(input).pipe(Effect.provide(retrieval))
+      const current = yield* context(retrieved.candidates)
       const outcome = routePrompt({
         prompt: input.text,
         currentSessionID: input.currentSessionID,
@@ -172,6 +180,7 @@ const layer = Layer.effect(
             pendingInput: current.pendingInput.get(session.id) ?? 0,
             busy: current.active.has(session.id),
             card: current.cards.get(session.id),
+            history: retrieved.matches.get(session.id),
           }),
         ),
       })
@@ -185,7 +194,7 @@ const layer = Layer.effect(
     })
 
     const cards = Effect.fn("SessionRouting.cards")(function* () {
-      const current = yield* context()
+      const current = yield* context(yield* candidateSessions())
       return current.candidates.flatMap((session) => {
         const card = current.cards.get(session.id)
         return card ? [{ sessionID: session.id, card }] : []
@@ -205,4 +214,8 @@ function toCandidate(input: { sessionID: string; title: string; score: number; r
   }
 }
 
-export const node = makeGlobalNode({ service: Service, layer, deps: [Session.node, Instance.node, KV.node] })
+export const node = makeGlobalNode({
+  service: Service,
+  layer,
+  deps: [Session.node, Instance.node, KV.node, Database.node, SessionSearch.node, SessionStore.node],
+})

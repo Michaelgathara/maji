@@ -8,6 +8,8 @@ export const wildcard = "all"
  * named explicitly in `experimental.<key>` or `OPENCODE_FLAGS`. Read a flag with Core's `Flag.enabled("<key>")`.
  */
 export const registry = {
+  session_routing:
+    "Route ordinary composer messages to an existing conversation or a new one using conversation history. Starts the background full-text history index.",
   todo: "Enable the experimental todowrite tool. Off by default in every build, including local and dev; opt in with OPENCODE_FLAGS=todo or experimental.todo: true.",
   media_blob: "Store new session media once in a deduplicated blob table instead of inline in every message row.",
   automations:

@@ -1281,6 +1281,33 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "SessionNotFoundError | LocationNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
+                }
+              }
+            }
           }
         },
         "description": "Experimental: may change without compatibility guarantees. Choose an existing task, the current task, a new task, or report uncertainty.",
@@ -17584,6 +17611,9 @@
                 "type": "boolean"
               },
               "all_flags": {
+                "type": "boolean"
+              },
+              "session_routing": {
                 "type": "boolean"
               },
               "todo": {
