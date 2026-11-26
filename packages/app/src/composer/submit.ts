@@ -1029,7 +1029,14 @@ async function admitPrompt(
     },
     // The data layer runs this in the prompt's turn of the send chain. The selection's commit follows what the
     // plugins prepare, so a send cancelled meanwhile stops here and nothing of it reaches the server.
-    prepare: () => (committed ??= (gate?.open ?? Promise.resolve()).then(() => (staged ? undefined : commit()))),
+    prepare: () =>
+      (committed ??= (gate?.open ?? Promise.resolve())
+        .then(() => (staged ? undefined : commit()))
+        .catch((error) => {
+          // A failed commit did not prepare the send; a retry must be allowed to try again.
+          committed = undefined
+          throw error
+        })),
   }
 
   if (turn.before) await turn.before

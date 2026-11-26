@@ -229,6 +229,26 @@ function text(state: ComposerStateTarget) {
 }
 
 describe("Composer submission", () => {
+  test("a retry repeats a failed selection preparation before admitting the captured prompt", async () => {
+    const calls: string[] = []
+    let attempts = 0
+
+    const target = session({
+      calls,
+      switchModel: async () => {
+        attempts += 1
+
+        if (attempts === 1) throw new Error("Selection temporarily unavailable")
+      },
+    })
+
+    const state = createMemoryComposerState({ prompt: "Compare Kyoto hotels" }).capture()
+    await submitInput(active(state, target)).submit(new Event("submit"))
+    await flush()
+    expect(attempts).toBe(2)
+    expect(calls.filter((call) => call === "send")).toEqual(["send"])
+    expect(text(state)).toBe("")
+  })
   test("routing waits before clearing, then sends only to the chosen chat and opens it", async () => {
     const original: string[] = []
     const receiving: string[] = []
