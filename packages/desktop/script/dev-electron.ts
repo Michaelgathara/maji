@@ -1,4 +1,5 @@
 import { $ } from "bun"
+import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -15,7 +16,8 @@ export async function prepareDevElectron() {
     .digest("hex")
     .slice(0, 16)
 
-  const root = join(import.meta.dirname, "../node_modules/.cache/opencode-dev", hash)
+  // File-provider-backed checkouts can restore Finder metadata immediately after cleanup.
+  const root = join(tmpdir(), "opencode-dev-electron", hash)
   const bundle = join(root, "OpenCode Dev.app")
   // Electron uses the executable's name to distinguish development from packaged apps.
   const executable = join(bundle, "Contents/MacOS/Electron")
@@ -34,6 +36,8 @@ export async function prepareDevElectron() {
   await $`plutil -replace CFBundleIdentifier -string ai.opencode.desktop.dev ${plist}`
   await $`plutil -insert NSAutoFillRequiresTextContentTypeForOneTimeCodeOnMac -bool true ${plist}`
   await Bun.write(join(bundle, "Contents/Resources/electron.icns"), icon)
+  // Copied Finder metadata and resource forks are rejected by codesign.
+  await $`xattr -cr ${bundle}`
   // Changing the bundle resources invalidates Electron's signature.
   await $`codesign --force --deep --sign - ${bundle}`
   await Bun.write(join(root, "ready"), "")
